@@ -10,6 +10,7 @@ if _agents_path.is_dir():
     __path__.append(str(_agents_path))
 # include all plugin packages
 for p in (_here.parent / "livekit-plugins").glob("livekit-plugins-*/livekit"):
-    __path__.append(str(p))
+    if p.is_dir() and (p / "__init__.py").is_file():
+        __path__.append(str(p))
 
 __all__: list[str] = []
