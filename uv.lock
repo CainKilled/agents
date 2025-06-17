@@ -1417,7 +1417,7 @@ wheels = [
 
 [[package]]
 name = "livekit-agents"
-source = { editable = "livekit-agents" }
+source = { editable = "packages/livekit-agents" }
 dependencies = [
     { name = "aiohttp" },
     { name = "av" },
@@ -1543,32 +1543,32 @@ requires-dist = [
     { name = "eval-type-backport" },
     { name = "livekit", specifier = ">=1.0.6,<2" },
     { name = "livekit-api", specifier = ">=1.0.2,<2" },
-    { name = "livekit-plugins-anthropic", marker = "extra == 'anthropic'", editable = "livekit-plugins/livekit-plugins-anthropic" },
-    { name = "livekit-plugins-assemblyai", marker = "extra == 'assemblyai'", editable = "livekit-plugins/livekit-plugins-assemblyai" },
-    { name = "livekit-plugins-aws", marker = "extra == 'aws'", editable = "livekit-plugins/livekit-plugins-aws" },
-    { name = "livekit-plugins-azure", marker = "extra == 'azure'", editable = "livekit-plugins/livekit-plugins-azure" },
-    { name = "livekit-plugins-bey", marker = "extra == 'bey'", editable = "livekit-plugins/livekit-plugins-bey" },
-    { name = "livekit-plugins-bithuman", marker = "extra == 'bithuman'", editable = "livekit-plugins/livekit-plugins-bithuman" },
-    { name = "livekit-plugins-cartesia", marker = "extra == 'cartesia'", editable = "livekit-plugins/livekit-plugins-cartesia" },
-    { name = "livekit-plugins-clova", marker = "extra == 'clova'", editable = "livekit-plugins/livekit-plugins-clova" },
-    { name = "livekit-plugins-deepgram", marker = "extra == 'deepgram'", editable = "livekit-plugins/livekit-plugins-deepgram" },
-    { name = "livekit-plugins-elevenlabs", marker = "extra == 'elevenlabs'", editable = "livekit-plugins/livekit-plugins-elevenlabs" },
-    { name = "livekit-plugins-fal", marker = "extra == 'fal'", editable = "livekit-plugins/livekit-plugins-fal" },
-    { name = "livekit-plugins-gladia", marker = "extra == 'gladia'", editable = "livekit-plugins/livekit-plugins-gladia" },
-    { name = "livekit-plugins-google", marker = "extra == 'google'", editable = "livekit-plugins/livekit-plugins-google" },
-    { name = "livekit-plugins-groq", marker = "extra == 'groq'", editable = "livekit-plugins/livekit-plugins-groq" },
-    { name = "livekit-plugins-hume", marker = "extra == 'hume'", editable = "livekit-plugins/livekit-plugins-hume" },
-    { name = "livekit-plugins-neuphonic", marker = "extra == 'neuphonic'", editable = "livekit-plugins/livekit-plugins-neuphonic" },
-    { name = "livekit-plugins-nltk", marker = "extra == 'nltk'", editable = "livekit-plugins/livekit-plugins-nltk" },
-    { name = "livekit-plugins-openai", marker = "extra == 'openai'", editable = "livekit-plugins/livekit-plugins-openai" },
-    { name = "livekit-plugins-playai", marker = "extra == 'playai'", editable = "livekit-plugins/livekit-plugins-playai" },
-    { name = "livekit-plugins-resemble", marker = "extra == 'resemble'", editable = "livekit-plugins/livekit-plugins-resemble" },
-    { name = "livekit-plugins-rime", marker = "extra == 'rime'", editable = "livekit-plugins/livekit-plugins-rime" },
-    { name = "livekit-plugins-silero", marker = "extra == 'silero'", editable = "livekit-plugins/livekit-plugins-silero" },
-    { name = "livekit-plugins-speechify", marker = "extra == 'speechify'", editable = "livekit-plugins/livekit-plugins-speechify" },
-    { name = "livekit-plugins-speechmatics", marker = "extra == 'speechmatics'", editable = "livekit-plugins/livekit-plugins-speechmatics" },
-    { name = "livekit-plugins-tavus", marker = "extra == 'tavus'", editable = "livekit-plugins/livekit-plugins-tavus" },
-    { name = "livekit-plugins-turn-detector", marker = "extra == 'turn-detector'", editable = "livekit-plugins/livekit-plugins-turn-detector" },
+    { name = "livekit-plugins-anthropic", marker = "extra == 'anthropic'", editable = "packages/livekit-plugins/livekit-plugins-anthropic" },
+    { name = "livekit-plugins-assemblyai", marker = "extra == 'assemblyai'", editable = "packages/livekit-plugins/livekit-plugins-assemblyai" },
+    { name = "livekit-plugins-aws", marker = "extra == 'aws'", editable = "packages/livekit-plugins/livekit-plugins-aws" },
+    { name = "livekit-plugins-azure", marker = "extra == 'azure'", editable = "packages/livekit-plugins/livekit-plugins-azure" },
+    { name = "livekit-plugins-bey", marker = "extra == 'bey'", editable = "packages/livekit-plugins/livekit-plugins-bey" },
+    { name = "livekit-plugins-bithuman", marker = "extra == 'bithuman'", editable = "packages/livekit-plugins/livekit-plugins-bithuman" },
+    { name = "livekit-plugins-cartesia", marker = "extra == 'cartesia'", editable = "packages/livekit-plugins/livekit-plugins-cartesia" },
+    { name = "livekit-plugins-clova", marker = "extra == 'clova'", editable = "packages/livekit-plugins/livekit-plugins-clova" },
+    { name = "livekit-plugins-deepgram", marker = "extra == 'deepgram'", editable = "packages/livekit-plugins/livekit-plugins-deepgram" },
+    { name = "livekit-plugins-elevenlabs", marker = "extra == 'elevenlabs'", editable = "packages/livekit-plugins/livekit-plugins-elevenlabs" },
+    { name = "livekit-plugins-fal", marker = "extra == 'fal'", editable = "packages/livekit-plugins/livekit-plugins-fal" },
+    { name = "livekit-plugins-gladia", marker = "extra == 'gladia'", editable = "packages/livekit-plugins/livekit-plugins-gladia" },
+    { name = "livekit-plugins-google", marker = "extra == 'google'", editable = "packages/livekit-plugins/livekit-plugins-google" },
+    { name = "livekit-plugins-groq", marker = "extra == 'groq'", editable = "packages/livekit-plugins/livekit-plugins-groq" },
+    { name = "livekit-plugins-hume", marker = "extra == 'hume'", editable = "packages/livekit-plugins/livekit-plugins-hume" },
+    { name = "livekit-plugins-neuphonic", marker = "extra == 'neuphonic'", editable = "packages/livekit-plugins/livekit-plugins-neuphonic" },
+    { name = "livekit-plugins-nltk", marker = "extra == 'nltk'", editable = "packages/livekit-plugins/livekit-plugins-nltk" },
+    { name = "livekit-plugins-openai", marker = "extra == 'openai'", editable = "packages/livekit-plugins/livekit-plugins-openai" },
+    { name = "livekit-plugins-playai", marker = "extra == 'playai'", editable = "packages/livekit-plugins/livekit-plugins-playai" },
+    { name = "livekit-plugins-resemble", marker = "extra == 'resemble'", editable = "packages/livekit-plugins/livekit-plugins-resemble" },
+    { name = "livekit-plugins-rime", marker = "extra == 'rime'", editable = "packages/livekit-plugins/livekit-plugins-rime" },
+    { name = "livekit-plugins-silero", marker = "extra == 'silero'", editable = "packages/livekit-plugins/livekit-plugins-silero" },
+    { name = "livekit-plugins-speechify", marker = "extra == 'speechify'", editable = "packages/livekit-plugins/livekit-plugins-speechify" },
+    { name = "livekit-plugins-speechmatics", marker = "extra == 'speechmatics'", editable = "packages/livekit-plugins/livekit-plugins-speechmatics" },
+    { name = "livekit-plugins-tavus", marker = "extra == 'tavus'", editable = "packages/livekit-plugins/livekit-plugins-tavus" },
+    { name = "livekit-plugins-turn-detector", marker = "extra == 'turn-detector'", editable = "packages/livekit-plugins/livekit-plugins-turn-detector" },
     { name = "livekit-protocol", specifier = "~=1.0" },
     { name = "mcp", marker = "python_full_version >= '3.10' and extra == 'mcp'", specifier = ">=1.6.0,<2" },
     { name = "nest-asyncio", specifier = ">=1.6.0" },
@@ -1604,7 +1604,7 @@ wheels = [
 
 [[package]]
 name = "livekit-plugins-anthropic"
-source = { editable = "livekit-plugins/livekit-plugins-anthropic" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-anthropic" }
 dependencies = [
     { name = "anthropic" },
     { name = "livekit-agents" },
@@ -1613,22 +1613,22 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.34" },
-    { name = "livekit-agents", editable = "livekit-agents" },
+    { name = "livekit-agents", editable = "packages/livekit-agents" },
 ]
 
 [[package]]
 name = "livekit-plugins-assemblyai"
-source = { editable = "livekit-plugins/livekit-plugins-assemblyai" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-assemblyai" }
 dependencies = [
     { name = "livekit-agents" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "livekit-agents", editable = "livekit-agents" }]
+requires-dist = [{ name = "livekit-agents", editable = "packages/livekit-agents" }]
 
 [[package]]
 name = "livekit-plugins-aws"
-source = { editable = "livekit-plugins/livekit-plugins-aws" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-aws" }
 dependencies = [
     { name = "aioboto3" },
     { name = "amazon-transcribe" },
@@ -1641,12 +1641,12 @@ requires-dist = [
     { name = "aioboto3", specifier = ">=14.1.0" },
     { name = "amazon-transcribe", specifier = ">=0.6.2" },
     { name = "boto3", specifier = ">=1.37.1" },
-    { name = "livekit-agents", editable = "livekit-agents" },
+    { name = "livekit-agents", editable = "packages/livekit-agents" },
 ]
 
 [[package]]
 name = "livekit-plugins-azure"
-source = { editable = "livekit-plugins/livekit-plugins-azure" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-azure" }
 dependencies = [
     { name = "azure-cognitiveservices-speech" },
     { name = "livekit-agents" },
@@ -1655,22 +1655,22 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "azure-cognitiveservices-speech", specifier = ">=1.43.0" },
-    { name = "livekit-agents", editable = "livekit-agents" },
+    { name = "livekit-agents", editable = "packages/livekit-agents" },
 ]
 
 [[package]]
 name = "livekit-plugins-bey"
-source = { editable = "livekit-plugins/livekit-plugins-bey" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-bey" }
 dependencies = [
     { name = "livekit-agents" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "livekit-agents", editable = "livekit-agents" }]
+requires-dist = [{ name = "livekit-agents", editable = "packages/livekit-agents" }]
 
 [[package]]
 name = "livekit-plugins-bithuman"
-source = { editable = "livekit-plugins/livekit-plugins-bithuman" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-bithuman" }
 dependencies = [
     { name = "bithuman" },
     { name = "livekit-agents" },
@@ -1679,22 +1679,22 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "bithuman", specifier = ">=0.5.5" },
-    { name = "livekit-agents", editable = "livekit-agents" },
+    { name = "livekit-agents", editable = "packages/livekit-agents" },
 ]
 
 [[package]]
 name = "livekit-plugins-cartesia"
-source = { editable = "livekit-plugins/livekit-plugins-cartesia" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-cartesia" }
 dependencies = [
     { name = "livekit-agents" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "livekit-agents", editable = "livekit-agents" }]
+requires-dist = [{ name = "livekit-agents", editable = "packages/livekit-agents" }]
 
 [[package]]
 name = "livekit-plugins-clova"
-source = { editable = "livekit-plugins/livekit-plugins-clova" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-clova" }
 dependencies = [
     { name = "livekit-agents" },
     { name = "pydub" },
@@ -1702,13 +1702,13 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "livekit-agents", editable = "livekit-agents" },
+    { name = "livekit-agents", editable = "packages/livekit-agents" },
     { name = "pydub", specifier = "~=0.25.1" },
 ]
 
 [[package]]
 name = "livekit-plugins-deepgram"
-source = { editable = "livekit-plugins/livekit-plugins-deepgram" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-deepgram" }
 dependencies = [
     { name = "livekit-agents", extra = ["codecs"] },
     { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -1717,23 +1717,23 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "livekit-agents", extras = ["codecs"], editable = "livekit-agents" },
+    { name = "livekit-agents", extras = ["codecs"], editable = "packages/livekit-agents" },
     { name = "numpy", specifier = ">=1.26" },
 ]
 
 [[package]]
 name = "livekit-plugins-elevenlabs"
-source = { editable = "livekit-plugins/livekit-plugins-elevenlabs" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-elevenlabs" }
 dependencies = [
     { name = "livekit-agents", extra = ["codecs"] },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "livekit-agents", extras = ["codecs"], editable = "livekit-agents" }]
+requires-dist = [{ name = "livekit-agents", extras = ["codecs"], editable = "packages/livekit-agents" }]
 
 [[package]]
 name = "livekit-plugins-fal"
-source = { editable = "livekit-plugins/livekit-plugins-fal" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-fal" }
 dependencies = [
     { name = "fal-client" },
     { name = "livekit-agents" },
@@ -1742,12 +1742,12 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fal-client" },
-    { name = "livekit-agents", editable = "livekit-agents" },
+    { name = "livekit-agents", editable = "packages/livekit-agents" },
 ]
 
 [[package]]
 name = "livekit-plugins-gladia"
-source = { editable = "livekit-plugins/livekit-plugins-gladia" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-gladia" }
 dependencies = [
     { name = "aiohttp" },
     { name = "livekit-agents", extra = ["codecs"] },
@@ -1758,13 +1758,13 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.8.0" },
-    { name = "livekit-agents", extras = ["codecs"], editable = "livekit-agents" },
+    { name = "livekit-agents", extras = ["codecs"], editable = "packages/livekit-agents" },
     { name = "numpy", specifier = ">=1.26" },
 ]
 
 [[package]]
 name = "livekit-plugins-google"
-source = { editable = "livekit-plugins/livekit-plugins-google" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-google" }
 dependencies = [
     { name = "google-auth" },
     { name = "google-cloud-speech" },
@@ -1779,12 +1779,12 @@ requires-dist = [
     { name = "google-cloud-speech", specifier = ">=2,<3" },
     { name = "google-cloud-texttospeech", specifier = ">=2,<3" },
     { name = "google-genai", specifier = ">=1.14.0" },
-    { name = "livekit-agents", editable = "livekit-agents" },
+    { name = "livekit-agents", editable = "packages/livekit-agents" },
 ]
 
 [[package]]
 name = "livekit-plugins-groq"
-source = { editable = "livekit-plugins/livekit-plugins-groq" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-groq" }
 dependencies = [
     { name = "aiohttp" },
     { name = "livekit" },
@@ -1796,13 +1796,13 @@ dependencies = [
 requires-dist = [
     { name = "aiohttp" },
     { name = "livekit" },
-    { name = "livekit-agents", extras = ["codecs"], editable = "livekit-agents" },
-    { name = "livekit-plugins-openai", editable = "livekit-plugins/livekit-plugins-openai" },
+    { name = "livekit-agents", extras = ["codecs"], editable = "packages/livekit-agents" },
+    { name = "livekit-plugins-openai", editable = "packages/livekit-plugins/livekit-plugins-openai" },
 ]
 
 [[package]]
 name = "livekit-plugins-hume"
-source = { editable = "livekit-plugins/livekit-plugins-hume" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-hume" }
 dependencies = [
     { name = "aiohttp" },
     { name = "hume" },
@@ -1813,32 +1813,32 @@ dependencies = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.8.0" },
     { name = "hume", specifier = ">=0.8.3" },
-    { name = "livekit-agents", editable = "livekit-agents" },
+    { name = "livekit-agents", editable = "packages/livekit-agents" },
 ]
 
 [[package]]
 name = "livekit-plugins-minimal"
-source = { editable = "livekit-plugins/livekit-plugins-minimal" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-minimal" }
 dependencies = [
     { name = "livekit-agents" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "livekit-agents", editable = "livekit-agents" }]
+requires-dist = [{ name = "livekit-agents", editable = "packages/livekit-agents" }]
 
 [[package]]
 name = "livekit-plugins-neuphonic"
-source = { editable = "livekit-plugins/livekit-plugins-neuphonic" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-neuphonic" }
 dependencies = [
     { name = "livekit-agents" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "livekit-agents", editable = "livekit-agents" }]
+requires-dist = [{ name = "livekit-agents", editable = "packages/livekit-agents" }]
 
 [[package]]
 name = "livekit-plugins-nltk"
-source = { editable = "livekit-plugins/livekit-plugins-nltk" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-nltk" }
 dependencies = [
     { name = "livekit-agents" },
     { name = "nltk" },
@@ -1846,13 +1846,13 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "livekit-agents", editable = "livekit-agents" },
+    { name = "livekit-agents", editable = "packages/livekit-agents" },
     { name = "nltk", specifier = ">=3.9.1,<4" },
 ]
 
 [[package]]
 name = "livekit-plugins-openai"
-source = { editable = "livekit-plugins/livekit-plugins-openai" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-openai" }
 dependencies = [
     { name = "livekit-agents", extra = ["codecs", "images"] },
     { name = "openai", extra = ["realtime"] },
@@ -1866,14 +1866,14 @@ vertex = [
 [package.metadata]
 requires-dist = [
     { name = "google-auth", marker = "extra == 'vertex'", specifier = ">=2.0.0" },
-    { name = "livekit-agents", extras = ["codecs", "images"], editable = "livekit-agents" },
+    { name = "livekit-agents", extras = ["codecs", "images"], editable = "packages/livekit-agents" },
     { name = "openai", extras = ["realtime"], specifier = ">=1.68.2" },
 ]
 provides-extras = ["vertex"]
 
 [[package]]
 name = "livekit-plugins-playai"
-source = { editable = "livekit-plugins/livekit-plugins-playai" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-playai" }
 dependencies = [
     { name = "aiohttp" },
     { name = "livekit" },
@@ -1885,33 +1885,33 @@ dependencies = [
 requires-dist = [
     { name = "aiohttp" },
     { name = "livekit" },
-    { name = "livekit-agents", extras = ["codecs"], editable = "livekit-agents" },
+    { name = "livekit-agents", extras = ["codecs"], editable = "packages/livekit-agents" },
     { name = "pyht", specifier = ">=0.1.14" },
 ]
 
 [[package]]
 name = "livekit-plugins-resemble"
-source = { editable = "livekit-plugins/livekit-plugins-resemble" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-resemble" }
 dependencies = [
     { name = "livekit-agents" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "livekit-agents", editable = "livekit-agents" }]
+requires-dist = [{ name = "livekit-agents", editable = "packages/livekit-agents" }]
 
 [[package]]
 name = "livekit-plugins-rime"
-source = { editable = "livekit-plugins/livekit-plugins-rime" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-rime" }
 dependencies = [
     { name = "livekit-agents", extra = ["codecs"] },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "livekit-agents", extras = ["codecs"], editable = "livekit-agents" }]
+requires-dist = [{ name = "livekit-agents", extras = ["codecs"], editable = "packages/livekit-agents" }]
 
 [[package]]
 name = "livekit-plugins-silero"
-source = { editable = "livekit-plugins/livekit-plugins-silero" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-silero" }
 dependencies = [
     { name = "livekit-agents" },
     { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -1922,44 +1922,44 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "livekit-agents", editable = "livekit-agents" },
+    { name = "livekit-agents", editable = "packages/livekit-agents" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "onnxruntime", specifier = ">=1.18" },
 ]
 
 [[package]]
 name = "livekit-plugins-speechify"
-source = { editable = "livekit-plugins/livekit-plugins-speechify" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-speechify" }
 dependencies = [
     { name = "livekit-agents", extra = ["codecs"] },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "livekit-agents", extras = ["codecs"], editable = "livekit-agents" }]
+requires-dist = [{ name = "livekit-agents", extras = ["codecs"], editable = "packages/livekit-agents" }]
 
 [[package]]
 name = "livekit-plugins-speechmatics"
-source = { editable = "livekit-plugins/livekit-plugins-speechmatics" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-speechmatics" }
 dependencies = [
     { name = "livekit-agents" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "livekit-agents", editable = "livekit-agents" }]
+requires-dist = [{ name = "livekit-agents", editable = "packages/livekit-agents" }]
 
 [[package]]
 name = "livekit-plugins-tavus"
-source = { editable = "livekit-plugins/livekit-plugins-tavus" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-tavus" }
 dependencies = [
     { name = "livekit-agents" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "livekit-agents", editable = "livekit-agents" }]
+requires-dist = [{ name = "livekit-agents", editable = "packages/livekit-agents" }]
 
 [[package]]
 name = "livekit-plugins-turn-detector"
-source = { editable = "livekit-plugins/livekit-plugins-turn-detector" }
+source = { editable = "packages/livekit-plugins/livekit-plugins-turn-detector" }
 dependencies = [
     { name = "jinja2" },
     { name = "livekit-agents" },
@@ -1973,7 +1973,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "jinja2" },
-    { name = "livekit-agents", editable = "livekit-agents" },
+    { name = "livekit-agents", editable = "packages/livekit-agents" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "onnxruntime", specifier = ">=1.18" },
     { name = "transformers", specifier = ">=4.47.1" },
