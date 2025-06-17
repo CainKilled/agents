@@ -359,10 +359,9 @@ async def test_tool_choice_options(
     print(calls)
 
     call_names = {call.call_info.function_info.name for call in calls}
-    if tool_choice == "none":
-        assert call_names == expected_calls, (
-            f"Test '{description}' failed: Expected calls {expected_calls}, but got {call_names}"
-        )
+    assert call_names == expected_calls, (
+        f"Test '{description}' failed: Expected calls {expected_calls}, but got {call_names}"
+    )
 
 
 async def _request_fnc_call(
