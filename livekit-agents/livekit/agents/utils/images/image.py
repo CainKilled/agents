@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from livekit import rtc
 
+from ..deps import require_package
+
 if TYPE_CHECKING:
     from PIL import Image
 
@@ -63,14 +65,10 @@ class ResizeOptions:
     """  # noqa: E501
 
 
-def import_pil():
-    try:
-        if "Image" not in globals():
-            globals()["Image"] = import_module("PIL.Image")
-    except ImportError:
-        raise ImportError(
-            "You haven't included the 'images' optional dependencies. Please install the 'codecs' extra by running `pip install livekit-agents[images]`"  # noqa: E501
-        ) from None
+def import_pil() -> None:
+    if "Image" not in globals():
+        require_package("PIL", extra="images")
+        globals()["Image"] = import_module("PIL.Image")
 
 
 def encode(frame: rtc.VideoFrame, options: EncodeOptions) -> bytes:

@@ -139,16 +139,17 @@ class AudioByteStream:
 
         if len(self._buf) % (2 * self._num_channels) != 0:
             logger.warning("AudioByteStream: incomplete frame during flush, dropping")
+            self._buf = bytearray()
             return []
 
-        return [
-            rtc.AudioFrame(
-                data=self._buf,
-                sample_rate=self._sample_rate,
-                num_channels=self._num_channels,
-                samples_per_channel=len(self._buf) // 2,
-            )
-        ]
+        frame = rtc.AudioFrame(
+            data=self._buf,
+            sample_rate=self._sample_rate,
+            num_channels=self._num_channels,
+            samples_per_channel=len(self._buf) // 2,
+        )
+        self._buf = bytearray()
+        return [frame]
 
 
 async def audio_frames_from_file(
