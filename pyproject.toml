@@ -31,8 +31,8 @@ livekit-plugins-tavus = { workspace = true }
 livekit-plugins-hume = { workspace = true }
 
 [tool.uv.workspace]
-members = ["livekit-plugins/*", "livekit-agents"]
-exclude = ["livekit-plugins/livekit-plugins-browser"]
+members = ["packages/livekit-plugins/*", "packages/livekit-agents"]
+exclude = ["packages/livekit-plugins/livekit-plugins-browser"]
 
 [dependency-groups]
 dev = [
