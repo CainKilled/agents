@@ -290,6 +290,13 @@ python myagent.py start
 
 Runs the agent with production-ready optimizations.
 
+## Additional scripts
+
+This repository includes helper utilities located in the `scripts/` directory.
+`scripts/auto_pr_manager.py` automates pull request creation for issues labeled
+`autopr`. The script spawns a worker thread for each issue, applies a placeholder
+fix, runs the test suite, and opens a PR only when tests pass.
+
 ## Contributing
 
 The Agents framework is under active development in a rapidly evolving field. We welcome and appreciate contributions of any kind, be it feedback, bugfixes, features, new plugins and tools, or better documentation. You can file issues under this repo, open a PR, or chat with us in LiveKit's [Slack community](https://livekit.io/join-slack).
