@@ -21,4 +21,4 @@ export OPENAI_API_KEY=your-api-key
 python3 transcriber.py start
 ```
 
-Then connect to any room. For an example frontend, you can use LiveKit's [Agents Playground](https://agents-playground.livekit.io/).
+Then connect to any room. For an example frontend, you can use LiveKit's [Agents Playground](https://agent-playground.livekit.io/).
