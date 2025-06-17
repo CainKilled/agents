@@ -2,8 +2,14 @@ import atexit
 import importlib.resources
 from contextlib import ExitStack
 
-import numpy as np
-import onnxruntime  # type: ignore
+from livekit.agents.utils import MissingDependencyError
+
+try:
+    import numpy as np
+    import onnxruntime  # type: ignore
+except ImportError as e:
+    missing = getattr(e, "name", "onnxruntime").split(".")[0]
+    raise MissingDependencyError(missing, extra="silero") from e
 
 _resource_files = ExitStack()
 atexit.register(_resource_files.close)

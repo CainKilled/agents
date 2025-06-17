@@ -7,17 +7,15 @@ from typing import Any
 
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 
+from livekit.agents.utils import MissingDependencyError
+
 try:
     from mcp import ClientSession, stdio_client
     from mcp.client.sse import sse_client
     from mcp.client.stdio import StdioServerParameters
     from mcp.types import JSONRPCMessage
 except ImportError as e:
-    raise ImportError(
-        "The 'mcp' package is required to run the MCP server integration but is not installed.\n"
-        "To fix this, install the optional dependency: pip install 'livekit-agents[mcp]'"
-    ) from e
-
+    raise MissingDependencyError("mcp", extra="mcp") from e
 
 from .tool_context import RawFunctionTool, ToolError, function_tool
 
