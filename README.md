@@ -280,7 +280,7 @@ The agent connects to LiveKit Cloud or your self-hosted server. Set the followin
 - LIVEKIT_API_SECRET
 
 You can connect using any LiveKit client SDK or telephony integration.
-To get started quickly, try the [Agents Playground](https://agents-playground.livekit.io/).
+To get started quickly, try the [Agents Playground](https://agent-playground.livekit.io/).
 
 ### Running for production
 

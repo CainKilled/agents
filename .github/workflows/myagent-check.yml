@@ -1,0 +1,19 @@
+name: MyAgent Check
+
+on:
+  push:
+    branches: [main, 0.x]
+  pull_request:
+    branches: [main, 0.x]
+  workflow_dispatch:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Verify myagent.py compiles
+        run: python -m py_compile myagent.py
