@@ -41,6 +41,14 @@ To install the core Agents library, along with plugins for popular model provide
 pip install "livekit-agents[openai,silero,deepgram,cartesia,turn-detector]~=1.0"
 ```
 
+Example scripts automatically install any dependencies listed in nearby
+`requirements.txt` files by calling a small helper:
+
+```python
+from dependency_checker import check_parent_requirements
+check_parent_requirements(__file__)
+```
+
 ## Docs and guides
 
 Documentation on the framework and how to use it can be found [here](https://docs.livekit.io/agents/)
@@ -269,7 +277,7 @@ This mode doesn't require external servers or dependencies and is useful for qui
 ### Developing with LiveKit clients
 
 ```shell
-python myagent.py dev
+python -m livekit.agents.devserver
 ```
 
 Starts the agent server and enables hot reloading when files change. This mode allows each process to host multiple concurrent agents efficiently.

@@ -3,12 +3,19 @@ import logging
 import random
 
 from dotenv import load_dotenv
+from dependency_checker import (
+    REQUIRED_DEPENDENCIES,
+    check_and_install,
+    check_parent_requirements,
+)
 
 from livekit import rtc
 from livekit.agents import JobContext, WorkerOptions, cli
 
 # Load environment variables
 load_dotenv()
+check_parent_requirements(__file__)
+check_and_install(REQUIRED_DEPENDENCIES)
 
 WIDTH = 640
 HEIGHT = 480

@@ -7,6 +7,11 @@ from itertools import cycle
 from typing import Optional
 
 from dotenv import load_dotenv
+from dependency_checker import (
+    REQUIRED_DEPENDENCIES,
+    check_and_install,
+    check_parent_requirements,
+)
 
 from livekit import api, rtc
 from livekit.agents import utils
@@ -21,6 +26,8 @@ logger = logging.getLogger("text-only")
 logger.setLevel(logging.INFO)
 
 load_dotenv()
+check_parent_requirements(__file__)
+check_and_install(REQUIRED_DEPENDENCIES)
 
 ## This example demonstrates a text-only agent.
 ## Send text input using TextStream to topic `lk.chat` (https://docs.livekit.io/home/client/data/text-streams)

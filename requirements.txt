@@ -1,0 +1,5 @@
+livekit-agents>=1.0
+aiofiles>=24.0.0
+aiohttp>=3.10
+numpy>=1.26.0
+av>=12.0.0

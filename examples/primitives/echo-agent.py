@@ -2,6 +2,11 @@ import asyncio
 import logging
 
 from dotenv import load_dotenv
+from dependency_checker import (
+    REQUIRED_DEPENDENCIES,
+    check_and_install,
+    check_parent_requirements,
+)
 
 from livekit import rtc
 from livekit.agents import (
@@ -16,6 +21,8 @@ from livekit.agents.vad import VADEventType
 from livekit.plugins import silero
 
 load_dotenv()
+check_parent_requirements(__file__)
+check_and_install(REQUIRED_DEPENDENCIES)
 logger = logging.getLogger("echo-agent")
 
 

@@ -1,6 +1,11 @@
 import logging
 
 from dotenv import load_dotenv
+from dependency_checker import (
+    REQUIRED_DEPENDENCIES,
+    check_and_install,
+    check_parent_requirements,
+)
 
 from livekit.agents import (
     Agent,
@@ -26,6 +31,9 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 logger = logging.getLogger("basic-agent")
 
 load_dotenv()
+
+check_parent_requirements(__file__)
+check_and_install(REQUIRED_DEPENDENCIES)
 
 
 class MyAgent(Agent):
