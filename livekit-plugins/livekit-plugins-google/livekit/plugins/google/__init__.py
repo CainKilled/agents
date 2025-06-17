@@ -1,34 +1,36 @@
-# Copyright 2023 LiveKit, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""Google AI plugin for LiveKit Agents
-
-Supports Gemini, Cloud Speech-to-Text, and Cloud Text-to-Speech.
-
-See https://docs.livekit.io/agents/integrations/stt/google/ for more information.
-"""
-
-from . import beta
-from .llm import LLM
-from .stt import STT, SpeechStream
-from .tts import TTS
+"""Google AI plugin for LiveKit Agents"""
+from livekit.agents import Plugin
 from .version import __version__
+from .log import logger
+
+_missing = None
+try:
+    from . import beta
+    from .llm import LLM
+    from .stt import STT, SpeechStream
+    from .tts import TTS
+except ModuleNotFoundError as e:
+    _missing = e
+
+    class _MissingDep:
+        def __init__(self, *a, **kw):
+            raise ModuleNotFoundError(f"{e.name} is required for {__name__}") from e
+
+    class STT(_MissingDep):
+        pass
+
+    class SpeechStream(_MissingDep):
+        pass
+
+    class TTS(_MissingDep):
+        pass
+
+    class LLM(_MissingDep):
+        pass
+
+    beta = None  # type: ignore
 
 __all__ = ["STT", "TTS", "SpeechStream", "__version__", "beta", "LLM"]
-from livekit.agents import Plugin
-
-from .log import logger
 
 
 class GooglePlugin(Plugin):

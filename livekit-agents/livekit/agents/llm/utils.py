@@ -14,7 +14,22 @@ from typing import (
     get_type_hints,
 )
 
-from pydantic import BaseModel, TypeAdapter, create_model
+from pydantic import BaseModel, create_model
+try:
+    from pydantic import TypeAdapter
+except Exception:  # pydantic <2
+    from pydantic import parse_obj_as
+
+    class TypeAdapter:
+        def __init__(self, typ):
+            self.typ = typ
+
+        def validate_python(self, obj):
+            return parse_obj_as(self.typ, obj)
+
+        def json_schema(self, *a, **k):
+            return {}
+
 from pydantic.fields import Field, FieldInfo
 from pydantic_core import PydanticUndefined, from_json
 from typing_extensions import TypeVar

@@ -1,36 +1,28 @@
-# Copyright 2023 LiveKit, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""Anthropic plugin for LiveKit Agents
-
-See https://docs.livekit.io/agents/integrations/llm/anthropic/ for more information.
-"""
-
-from .llm import LLM, LLMStream
-from .log import logger
-from .models import ChatModels
-from .version import __version__
-
-__all__ = [
-    "LLM",
-    "LLMStream",
-    "ChatModels",
-    "logger",
-    "__version__",
-]
-
+"""Anthropic plugin for LiveKit Agents"""
 from livekit.agents import Plugin
+from .version import __version__
+from .log import logger
+
+_missing = None
+try:
+    from .llm import LLM, LLMStream
+    from .models import ChatModels
+except ModuleNotFoundError as e:
+    _missing = e
+
+    class _MissingDep:
+        def __init__(self, *a, **kw):
+            raise ModuleNotFoundError(f"{e.name} is required for {__name__}") from e
+
+    class LLM(_MissingDep):
+        pass
+
+    class LLMStream(_MissingDep):
+        pass
+
+    ChatModels = None  # type: ignore
+
+__all__ = ["LLM", "LLMStream", "ChatModels", "logger", "__version__"]
 
 
 class AnthropicPlugin(Plugin):

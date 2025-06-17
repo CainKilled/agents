@@ -1,15 +1,5 @@
 from livekit import rtc
-
-from . import aio, audio, codecs, http_context, hw, images
-from .audio import AudioBuffer, combine_frames, merge_frames
-from .connection_pool import ConnectionPool
-from .exp_filter import ExpFilter
-from .log import log_exceptions
-from .misc import is_given, shortuuid, time_ms
-from .moving_average import MovingAverage
-from .participant import wait_for_participant
-
-EventEmitter = rtc.EventEmitter
+import importlib
 
 __all__ = [
     "AudioBuffer",
@@ -31,6 +21,37 @@ __all__ = [
     "ConnectionPool",
     "wait_for_participant",
 ]
+
+_module_map = {
+    "audio": "audio",
+    "aio": "aio",
+    "codecs": "codecs",
+    "http_context": "http_context",
+    "hw": "hw",
+    "images": "images",
+    "ExpFilter": "exp_filter",
+    "MovingAverage": "moving_average",
+    "log_exceptions": "log",
+    "ConnectionPool": "connection_pool",
+    "time_ms": "misc",
+    "shortuuid": "misc",
+    "is_given": "misc",
+    "wait_for_participant": "participant",
+    "AudioBuffer": "audio",
+    "combine_frames": "audio",
+    "merge_frames": "audio",
+}
+
+def __getattr__(name: str):
+    if name == "EventEmitter":
+        return rtc.EventEmitter
+    mod_name = _module_map.get(name)
+    if mod_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    module = importlib.import_module(f"{__name__}.{mod_name}")
+    value = getattr(module, name, module)
+    globals()[name] = value
+    return value
 
 # Cleanup docs of unexported modules
 _module = dir()

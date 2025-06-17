@@ -14,10 +14,25 @@
 
 from __future__ import annotations
 
+import sys
 import time
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, Field, PrivateAttr, TypeAdapter
+from pydantic import BaseModel, Field, PrivateAttr
+try:
+    from pydantic import TypeAdapter
+except Exception:  # pydantic <2
+    from pydantic import parse_obj_as
+
+    class TypeAdapter:
+        def __init__(self, typ):
+            self.typ = typ
+
+        def validate_python(self, obj):
+            return parse_obj_as(self.typ, obj)
+
+        def json_schema(self, *a, **k):
+            return {}
 from typing_extensions import TypeAlias
 
 from livekit import rtc
@@ -93,11 +108,23 @@ class ImageContent(BaseModel):
     """
     _cache: dict[int, Any] = PrivateAttr(default_factory=dict)
 
+    if getattr(sys.modules.get('pydantic'), 'VERSION', '1').startswith('2'):
+        model_config = {'arbitrary_types_allowed': True}
+    else:
+        class Config:
+            arbitrary_types_allowed = True
+
 
 class AudioContent(BaseModel):
     type: Literal["audio_content"] = Field(default="audio_content")
     frame: list[rtc.AudioFrame]
     transcript: str | None = None
+
+    if getattr(sys.modules.get('pydantic'), 'VERSION', '1').startswith('2'):
+        model_config = {'arbitrary_types_allowed': True}
+    else:
+        class Config:
+            arbitrary_types_allowed = True
 
 
 ChatRole: TypeAlias = Literal["developer", "system", "user", "assistant"]

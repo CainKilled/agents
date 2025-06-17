@@ -44,6 +44,7 @@ from .tool_context import (
     is_function_tool,
     is_raw_function_tool,
 )
+from .tool_context import ToolContext as FunctionContext
 
 __all__ = [
     "LLM",
@@ -69,6 +70,7 @@ __all__ = [
     "FunctionTool",
     "is_raw_function_tool",
     "RawFunctionTool",
+    "FunctionContext",
     "ToolContext",
     "ToolError",
     "StopResponse",

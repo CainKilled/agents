@@ -2,7 +2,21 @@ from __future__ import annotations
 
 from typing import Any, TypeVar
 
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel
+try:
+    from pydantic import TypeAdapter
+except Exception:  # pydantic <2
+    from pydantic import parse_obj_as
+
+    class TypeAdapter:
+        def __init__(self, typ):
+            self.typ = typ
+
+        def validate_python(self, obj):
+            return parse_obj_as(self.typ, obj)
+
+        def json_schema(self, *a, **k):
+            return {}
 from typing_extensions import TypeGuard
 
 _T = TypeVar("_T")

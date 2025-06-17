@@ -42,6 +42,9 @@ class GenerationCreatedEvent:
 
 class RealtimeModelError(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    class Config:
+        arbitrary_types_allowed = True
     type: Literal["realtime_model_error"] = "realtime_model_error"
     timestamp: float
     label: str

@@ -17,8 +17,27 @@
 See https://docs.livekit.io/build/turns/vad/ for more information.
 """
 
-from .vad import VAD, VADStream
-from .version import __version__
+_missing = None
+try:
+    from .vad import VAD, VADStream
+    from .version import __version__
+except ModuleNotFoundError as e:
+    _missing = e
+    _msg = f"{e.name} is required for {__name__}"
+
+    class _MissingDep:
+        def __init__(self, *a, **kw):
+            raise ModuleNotFoundError(_msg) from e
+
+    class VADStream(_MissingDep):
+        pass
+
+    class VAD(_MissingDep):
+        @classmethod
+        def load(cls, *a, **kw):
+            return cls()
+
+    __version__ = "0.0.0"
 
 __all__ = ["VAD", "VADStream", "__version__"]
 
