@@ -1,26 +1,68 @@
-# Copyright 2023 LiveKit, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""LiveKit Agents for Python
-
-See [https://docs.livekit.io/agents/](https://docs.livekit.io/agents/) for quickstarts,
-documentation, and examples.
-"""
-
+"""LiveKit Agents for Python"""
 import typing
+import importlib
 
-from . import cli, ipc, llm, metrics, stt, tokenize, tts, utils, vad, voice  # noqa: F401
+# Lazily expose submodules to avoid optional dependencies during import
+_lazy_modules = {
+    "cli": "livekit.agents.cli",
+    "ipc": "livekit.agents.ipc",
+    "llm": "livekit.agents.llm",
+    "metrics": "livekit.agents.metrics",
+    "stt": "livekit.agents.stt",
+    "tokenize": "livekit.agents.tokenize",
+    "tts": "livekit.agents.tts",
+    "utils": "livekit.agents.utils",
+    "vad": "livekit.agents.vad",
+    "voice": "livekit.agents.voice",
+    # use a lightweight stub so importing `io` doesn't pull in optional deps
+    "io": "livekit._io_stub",
+}
+
+_lazy_attrs = {
+    "Worker": ("livekit.agents.worker", "Worker"),
+    "WorkerOptions": ("livekit.agents.worker", "WorkerOptions"),
+    "WorkerPermissions": ("livekit.agents.worker", "WorkerPermissions"),
+    "WorkerType": ("livekit.agents.worker", "WorkerType"),
+    "SimulateJobInfo": ("livekit.agents.worker", "SimulateJobInfo"),
+    "JobProcess": ("livekit.agents.job", "JobProcess"),
+    "JobContext": ("livekit.agents.job", "JobContext"),
+    "JobRequest": ("livekit.agents.job", "JobRequest"),
+    "get_job_context": ("livekit.agents.job", "get_job_context"),
+    "JobExecutorType": ("livekit.agents.job", "JobExecutorType"),
+    "AutoSubscribe": ("livekit.agents.job", "AutoSubscribe"),
+    "FunctionTool": ("livekit.agents.llm.tool_context", "FunctionTool"),
+    "function_tool": ("livekit.agents.llm.tool_context", "function_tool"),
+    "ChatContext": ("livekit.agents.llm.chat_context", "ChatContext"),
+    "ChatItem": ("livekit.agents.llm.chat_context", "ChatItem"),
+    "ChatMessage": ("livekit.agents.llm.chat_context", "ChatMessage"),
+    "ChatRole": ("livekit.agents.llm.chat_context", "ChatRole"),
+    "ChatContent": ("livekit.agents.llm.chat_context", "ChatContent"),
+    "FunctionCall": ("livekit.agents.llm.chat_context", "FunctionCall"),
+    "FunctionCallOutput": ("livekit.agents.llm.chat_context", "FunctionCallOutput"),
+    "StopResponse": ("livekit.agents.llm.tool_context", "StopResponse"),
+    "ToolError": ("livekit.agents.llm.tool_context", "ToolError"),
+    "RunContext": ("livekit.agents.voice", "RunContext"),
+    "Plugin": ("livekit.agents.plugin", "Plugin"),
+    "AgentSession": ("livekit.agents.voice", "AgentSession"),
+    "AgentEvent": ("livekit.agents.voice", "AgentEvent"),
+    "ModelSettings": ("livekit.agents.voice", "ModelSettings"),
+    "Agent": ("livekit.agents.voice", "Agent"),
+    "AgentStateChangedEvent": ("livekit.agents.voice", "AgentStateChangedEvent"),
+    "CloseEvent": ("livekit.agents.voice", "CloseEvent"),
+    "ConversationItemAddedEvent": ("livekit.agents.voice", "ConversationItemAddedEvent"),
+    "ErrorEvent": ("livekit.agents.voice", "ErrorEvent"),
+    "MetricsCollectedEvent": ("livekit.agents.voice", "MetricsCollectedEvent"),
+    "SpeechCreatedEvent": ("livekit.agents.voice", "SpeechCreatedEvent"),
+    "UserInputTranscribedEvent": ("livekit.agents.voice", "UserInputTranscribedEvent"),
+    "UserStateChangedEvent": ("livekit.agents.voice", "UserStateChangedEvent"),
+    "BackgroundAudioPlayer": ("livekit.agents.voice.background_audio", "BackgroundAudioPlayer"),
+    "BuiltinAudioClip": ("livekit.agents.voice.background_audio", "BuiltinAudioClip"),
+    "AudioConfig": ("livekit.agents.voice.background_audio", "AudioConfig"),
+    "RoomIO": ("livekit.agents.voice.room_io", "RoomIO"),
+    "RoomInputOptions": ("livekit.agents.voice.room_io", "RoomInputOptions"),
+    "RoomOutputOptions": ("livekit.agents.voice.room_io", "RoomOutputOptions"),
+}
+
 from ._exceptions import (
     APIConnectionError,
     APIError,
@@ -28,25 +70,6 @@ from ._exceptions import (
     APITimeoutError,
     AssignmentTimeoutError,
 )
-from .job import (
-    AutoSubscribe,
-    JobContext,
-    JobExecutorType,
-    JobProcess,
-    JobRequest,
-    get_job_context,
-)
-from .llm.chat_context import (
-    ChatContent,
-    ChatContext,
-    ChatItem,
-    ChatMessage,
-    ChatRole,
-    FunctionCall,
-    FunctionCallOutput,
-)
-from .llm.tool_context import FunctionTool, StopResponse, ToolError, function_tool
-from .plugin import Plugin
 from .types import (
     DEFAULT_API_CONNECT_OPTIONS,
     NOT_GIVEN,
@@ -55,45 +78,25 @@ from .types import (
     NotGivenOr,
 )
 from .version import __version__
-from .voice import (
-    Agent,
-    AgentEvent,
-    AgentSession,
-    AgentStateChangedEvent,
-    CloseEvent,
-    ConversationItemAddedEvent,
-    ErrorEvent,
-    MetricsCollectedEvent,
-    ModelSettings,
-    RunContext,
-    SpeechCreatedEvent,
-    UserInputTranscribedEvent,
-    UserStateChangedEvent,
-    avatar,
-    io,
-)
-from .voice.background_audio import AudioConfig, BackgroundAudioPlayer, BuiltinAudioClip
-from .voice.room_io import RoomInputOptions, RoomIO, RoomOutputOptions
-from .worker import (
-    SimulateJobInfo,
-    Worker,
-    WorkerOptions,
-    WorkerPermissions,
-    WorkerType,
-)
 
 if typing.TYPE_CHECKING:
     from .llm import mcp  # noqa: F401
 
-
 def __getattr__(name: str) -> typing.Any:
     if name == "mcp":
         from .llm import mcp
-
         return mcp
-
+    if name in _lazy_modules:
+        module = importlib.import_module(_lazy_modules[name])
+        globals()[name] = module
+        return module
+    if name in _lazy_attrs:
+        module_name, attr = _lazy_attrs[name]
+        module = importlib.import_module(module_name)
+        value = getattr(module, attr)
+        globals()[name] = value
+        return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
 
 __all__ = [
     "__version__",
@@ -168,6 +171,5 @@ _module = dir()
 NOT_IN_ALL = [m for m in _module if m not in __all__]
 
 __pdoc__ = {}
-
 for n in NOT_IN_ALL:
     __pdoc__[n] = False

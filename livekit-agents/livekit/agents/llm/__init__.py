@@ -36,6 +36,7 @@ from .tool_context import (
     FunctionTool,
     RawFunctionTool,
     StopResponse,
+    ai_callable,
     ToolChoice,
     ToolContext,
     ToolError,
@@ -44,6 +45,8 @@ from .tool_context import (
     is_function_tool,
     is_raw_function_tool,
 )
+from .tool_context import ToolContext as FunctionContext
+from .type_info import TypeInfo
 
 __all__ = [
     "LLM",
@@ -69,6 +72,9 @@ __all__ = [
     "FunctionTool",
     "is_raw_function_tool",
     "RawFunctionTool",
+    "ai_callable",
+    "TypeInfo",
+    "FunctionContext",
     "ToolContext",
     "ToolError",
     "StopResponse",

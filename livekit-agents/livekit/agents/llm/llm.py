@@ -56,6 +56,9 @@ class ChatChunk(BaseModel):
 
 class LLMError(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    class Config:
+        arbitrary_types_allowed = True
     type: Literal["llm_error"] = "llm_error"
     timestamp: float
     label: str

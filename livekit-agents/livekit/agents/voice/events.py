@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Any, Generic, Literal, TypeVar, Union
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, Field, model_validator
+import pydantic as _pydantic
+if getattr(_pydantic, "VERSION", "1").startswith("2"):
+    from pydantic import ConfigDict
 from typing_extensions import Self
 
 from ..llm import (
@@ -121,7 +124,11 @@ class FunctionToolsExecutedEvent(BaseModel):
 
 
 class SpeechCreatedEvent(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    if getattr(_pydantic, "VERSION", "1").startswith("2"):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+    else:
+        class Config:
+            arbitrary_types_allowed = True
 
     type: Literal["speech_created"] = "speech_created"
     user_initiated: bool
@@ -133,7 +140,11 @@ class SpeechCreatedEvent(BaseModel):
 
 
 class ErrorEvent(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    if getattr(_pydantic, "VERSION", "1").startswith("2"):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+    else:
+        class Config:
+            arbitrary_types_allowed = True
     type: Literal["error"] = "error"
     error: LLMError | STTError | TTSError | RealtimeModelError | Any
     source: LLM | STT | TTS | RealtimeModel | Any

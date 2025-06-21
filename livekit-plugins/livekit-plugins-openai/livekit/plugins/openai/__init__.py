@@ -1,35 +1,41 @@
-# Copyright 2023 LiveKit, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""OpenAI plugin for LiveKit Agents
-
-Support for OpenAI Realtime API, LLM, TTS, and STT APIs.
-
-Also includes support for a large number of OpenAI-compatible APIs including Azure OpenAI, Cerebras,
-Fireworks, Perplexity, Telnyx, xAI, Ollama, and DeepSeek.
-
-See https://docs.livekit.io/agents/integrations/openai/ and
-https://docs.livekit.io/agents/integrations/llm/ for more information.
-"""
-
-from . import realtime
-from .embeddings import EmbeddingData, create_embeddings
-from .llm import LLM, LLMStream
-from .models import STTModels, TTSModels, TTSVoices
-from .stt import STT
-from .tts import TTS
+"""OpenAI plugin for LiveKit Agents"""
+from livekit.agents import Plugin
 from .version import __version__
+from .log import logger
+
+_missing = None
+try:
+    from . import realtime
+    from .embeddings import EmbeddingData, create_embeddings
+    from .llm import LLM, LLMStream
+    from .models import STTModels, TTSModels, TTSVoices
+    from .stt import STT
+    from .tts import TTS
+except ModuleNotFoundError as e:
+    _missing = e
+
+    class _MissingDep:
+        def __init__(self, *a, **kw):
+            raise ModuleNotFoundError(f"{e.name} is required for {__name__}") from e
+
+    class STT(_MissingDep):
+        pass
+
+    class TTS(_MissingDep):
+        pass
+
+    class LLM(_MissingDep):
+        pass
+
+    class LLMStream(_MissingDep):
+        pass
+
+    def create_embeddings(*a, **kw):  # type: ignore
+        raise ModuleNotFoundError(f"{e.name} is required for {__name__}") from e
+
+    EmbeddingData = None  # type: ignore
+    STTModels = TTSModels = TTSVoices = None  # type: ignore
+    realtime = None  # type: ignore
 
 __all__ = [
     "STT",
@@ -44,10 +50,6 @@ __all__ = [
     "realtime",
     "__version__",
 ]
-
-from livekit.agents import Plugin
-
-from .log import logger
 
 
 class OpenAIPlugin(Plugin):

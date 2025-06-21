@@ -40,7 +40,12 @@ class TTSCapabilities:
 
 
 class TTSError(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    import pydantic as _pydantic
+    if getattr(_pydantic, "VERSION", "1").startswith("2"):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+    else:
+        class Config:
+            arbitrary_types_allowed = True
     type: Literal["tts_error"] = "tts_error"
     timestamp: float
     label: str

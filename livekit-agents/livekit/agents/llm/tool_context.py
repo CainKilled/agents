@@ -42,7 +42,11 @@ class NamedToolChoice(TypedDict, total=False):
     function: Required[Function]
 
 
-ToolChoice = Union[NamedToolChoice, Literal["auto", "required", "none"]]
+@dataclass
+class ToolChoice:
+    type: Literal["function", "auto", "required", "none"] = "auto"
+    name: str | None = None
+
 
 
 class ToolError(Exception):
@@ -197,6 +201,28 @@ def find_function_tools(cls_or_obj: Any) -> list[FunctionTool | RawFunctionTool]
         if is_function_tool(member) or is_raw_function_tool(member):
             methods.append(member)
     return methods
+
+
+def ai_callable(
+    f: F | None = None,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+    auto_retry: bool | None = None,
+    raw_schema: RawFunctionDescription | dict | None = None,
+) -> FunctionTool | RawFunctionTool | Callable[[F], FunctionTool | RawFunctionTool]:
+    """Decorator used in tests to mark a function as a callable tool.
+
+    ``auto_retry`` is accepted for API compatibility but ignored in this stub
+    implementation.
+    """
+
+    return function_tool(
+        f,
+        name=name,
+        description=description,
+        raw_schema=raw_schema,
+    )
 
 
 class ToolContext:

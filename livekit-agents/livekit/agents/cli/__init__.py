@@ -1,12 +1,11 @@
-from .cli import run_app
+from . import log
 
-__all__ = ["run_app"]
+__all__ = ["run_app", "log"]
 
-# Cleanup docs of unexported modules
-_module = dir()
-NOT_IN_ALL = [m for m in _module if m not in __all__]
 
-__pdoc__ = {}
-
-for n in NOT_IN_ALL:
-    __pdoc__[n] = False
+def __getattr__(name: str):
+    if name == "run_app":
+        from .cli import run_app
+        globals()["run_app"] = run_app
+        return run_app
+    raise AttributeError(name)
