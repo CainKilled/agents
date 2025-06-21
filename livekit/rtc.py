@@ -1,6 +1,9 @@
 class EventEmitter:
     def __init__(self):
         self._listeners = {}
+
+    def __class_getitem__(cls, item):
+        return cls
     def on(self, event, callback):
         self._listeners.setdefault(event, []).append(callback)
     def off(self, event, callback):
@@ -17,6 +20,23 @@ class AudioFrame:
         self.num_channels = num_channels
         self.samples_per_channel = samples_per_channel
         self.duration = (samples_per_channel / sample_rate) if sample_rate else 0
+
+
+class VideoBufferType:
+    RGB24 = 0
+    RGBA = 1
+    BGRA = 2
+
+
+class VideoFrame:
+    def __init__(self, width=0, height=0, type=VideoBufferType.RGB24, data=b""):
+        self.width = width
+        self.height = height
+        self.type = type
+        self.data = data
+
+    def convert(self, target_type):
+        return VideoFrame(self.width, self.height, target_type, self.data)
 
 class AudioResampler:
     def __init__(self, sample_rate=48000, num_channels=1):
@@ -50,5 +70,8 @@ class RemoteParticipant:
         self.kind = kind
 
 class ParticipantKind:
+    PARTICIPANT_KIND_STANDARD = 0
+    PARTICIPANT_KIND_AGENT = 1
+    PARTICIPANT_KIND_SIP = 2
     class ValueType:
         pass
