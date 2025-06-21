@@ -48,5 +48,5 @@ class web:
             self.content_type = content_type
             self.status = status
 
-    def json_response(data):
-        return web.Response(body=str(data))
+    def json_response(self):
+        return web.Response(body=str(self))
