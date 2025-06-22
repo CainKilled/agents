@@ -12,13 +12,17 @@ def install_package() -> None:
 
 def run_command(cmd: list[str]) -> bool:
     """Run a command and return True if it succeeds."""
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.stdout:
-        logging.info(proc.stdout)
-    if proc.returncode != 0:
-        if proc.stderr:
-            logging.error(proc.stderr)
-    return proc.returncode == 0
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.stdout:
+            logging.info(proc.stdout)
+        if proc.returncode != 0:
+            if proc.stderr:
+                logging.error(proc.stderr)
+        return proc.returncode == 0
+    except Exception as e:
+        logging.error(f"Exception while running command {cmd}: {e}")
+        return False
 
 
 def search_and_fix() -> bool:
