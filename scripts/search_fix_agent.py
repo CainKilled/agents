@@ -16,9 +16,8 @@ def run_command(cmd: list[str]) -> bool:
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.stdout:
             logging.info(proc.stdout)
-        if proc.returncode != 0:
-            if proc.stderr:
-                logging.error(proc.stderr)
+        if proc.returncode != 0 and proc.stderr:
+            logging.error(proc.stderr)
         return proc.returncode == 0
     except Exception as e:
         logging.error(f"Exception while running command {cmd}: {e}")
