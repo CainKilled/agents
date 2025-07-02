@@ -293,7 +293,7 @@ class AgentActivity(RecognitionHooks):
     def _wake_up_main_task(self) -> None:
         self._q_updated.set()
 
-    # TODO(theomonnom): Shoukd pause and resume call on_enter and on_exit? probably not
+    # TODO(theomonnom): Should pause and resume call on_enter and on_exit? probably not
     async def pause(self) -> None:
         pass
 

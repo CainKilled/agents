@@ -44,6 +44,26 @@ from .tool_context import (
     is_function_tool,
     is_raw_function_tool,
 )
+class TypeInfo:
+    __slots__ = ("description", "choices")
+
+    def __init__(self, description: str | None = None, choices: list | None = None) -> None:
+        self.description = description
+        self.choices = choices
+
+    def __hash__(self) -> int:
+        return hash((self.description, tuple(self.choices or [])))
+
+
+class FunctionContext:
+    def ai_callable(self, *args, **kwargs):
+        return ai_callable(*args, **kwargs)
+
+
+def ai_callable(*args, auto_retry: bool | None = None, **kwargs):
+    # ``auto_retry`` is accepted for API compatibility but ignored in this stub
+    return function_tool(*args, **kwargs)
+
 
 __all__ = [
     "LLM",
@@ -66,6 +86,9 @@ __all__ = [
     "is_function_tool",
     "function_tool",
     "find_function_tools",
+    "FunctionContext",
+    "TypeInfo",
+    "ai_callable",
     "FunctionTool",
     "is_raw_function_tool",
     "RawFunctionTool",

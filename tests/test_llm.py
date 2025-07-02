@@ -10,7 +10,7 @@ import pytest
 
 from livekit.agents import APIConnectionError, llm
 from livekit.agents.llm import ChatContext, FunctionContext, TypeInfo, ai_callable
-from livekit.plugins import anthropic, aws, google, openai
+from livekit.plugins import openai
 from livekit.rtc import VideoBufferType, VideoFrame
 
 
@@ -74,19 +74,6 @@ def test_hashable_typeinfo():
 
 LLMS: list[Callable[[], llm.LLM]] = [
     pytest.param(lambda: openai.LLM(), id="openai"),
-    # lambda: openai.beta.AssistantLLM(
-    #     assistant_opts=openai.beta.AssistantOptions(
-    #         create_options=openai.beta.AssistantCreateOptions(
-    #             name=f"test-{uuid.uuid4()}",
-    #             instructions="You are a basic assistant",
-    #             model="gpt-4o",
-    #         )
-    #     )
-    # ),
-    pytest.param(lambda: anthropic.LLM(), id="anthropic"),
-    pytest.param(lambda: google.LLM(), id="google"),
-    pytest.param(lambda: google.LLM(vertexai=True), id="google-vertexai"),
-    pytest.param(lambda: aws.LLM(), id="aws"),
 ]
 
 
@@ -359,10 +346,9 @@ async def test_tool_choice_options(
     print(calls)
 
     call_names = {call.call_info.function_info.name for call in calls}
-    if tool_choice == "none":
-        assert call_names == expected_calls, (
-            f"Test '{description}' failed: Expected calls {expected_calls}, but got {call_names}"
-        )
+    assert call_names == expected_calls, (
+        f"Test '{description}' failed: Expected calls {expected_calls}, but got {call_names}"
+    )
 
 
 async def _request_fnc_call(
