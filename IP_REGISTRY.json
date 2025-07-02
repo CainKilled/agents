@@ -1,0 +1,37 @@
+[
+  {
+    "author": "OpenAI Assistant",
+    "description": "Add av stub for offline tests",
+    "sources": [
+      "av/__init__.py",
+      "av/container.py"
+    ],
+    "timestamp": "2025-06-17T14:19:07.787992+00:00"
+  },
+  {
+    "author": "OpenAI Assistant",
+    "description": "Add psutil stub",
+    "sources": [
+      "psutil/__init__.py"
+    ],
+    "timestamp": "2025-06-17T14:37:36.230349+00:00"
+  },
+  {
+    "author": "OpenAI Assistant",
+    "description": "Add minimal livekit stubs",
+    "sources": [
+      "livekit/__init__.py",
+      "livekit/rtc.py",
+      "livekit/protocol/__init__.py",
+      "livekit/protocol/agent.py",
+      "livekit/agents/__init__.py",
+      "livekit/agents/utils/__init__.py",
+      "livekit/agents/utils/aio/__init__.py",
+      "livekit/agents/utils/aio/channel.py",
+      "livekit/agents/utils/aio/duplex_unix.py",
+      "livekit/agents/utils/audio.py",
+      "livekit/agents/utils/codecs.py"
+    ],
+    "timestamp": "2025-06-21T16:50:00+00:00"
+  }
+]

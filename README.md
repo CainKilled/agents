@@ -290,6 +290,19 @@ python myagent.py start
 
 Runs the agent with production-ready optimizations.
 
+## Intellectual Property Registry
+
+All new contributions must be logged in `IP_REGISTRY.json`. Use
+`scripts/ip_registry.py` to add entries describing your original work and the
+files involved. This record helps track authorship and assists future
+developers in understanding the provenance of code.
+
+Example:
+
+```bash
+python scripts/ip_registry.py add "Your Name" "Fix bug in agents" path/to/file.py
+```
+
 ## Contributing
 
 The Agents framework is under active development in a rapidly evolving field. We welcome and appreciate contributions of any kind, be it feedback, bugfixes, features, new plugins and tools, or better documentation. You can file issues under this repo, open a PR, or chat with us in LiveKit's [Slack community](https://livekit.io/join-slack).
