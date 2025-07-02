@@ -21,8 +21,8 @@ services:
     command: tail -f /dev/null
     volumes:
       - ../tests:/app/tests
-      - ../livekit-agents:/app/livekit-agents
-      - ../livekit-plugins:/app/livekit-plugins
+      - ../packages/livekit-agents:/app/livekit-agents
+      - ../packages/livekit-plugins:/app/livekit-plugins
       - ../pyproject.toml:/app/pyproject.toml
       - ../uv.lock:/app/uv.lock
     environment:
