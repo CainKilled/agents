@@ -39,3 +39,10 @@ async def test_sleep():
     sleep = aio.sleep(5)
     sleep.reset(0.1)
     await sleep
+
+
+async def test_file_read_write(tmp_path):
+    file_path = tmp_path / "sample.txt"
+    await aio.write_text(file_path, "hello")
+    data = await aio.read_text(file_path)
+    assert data == "hello"
