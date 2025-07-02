@@ -71,7 +71,7 @@ from ..log import logger
 # 8. response.output_item.done (contains item_status: "completed/incomplete")
 # 9. response.done (contains status_details for cancelled/failed/turn_detected/content_filter)
 #
-# Ourcode assumes a response will generate only one item with type "message"
+# Our code assumes a response will generate only one item with type "message"
 
 
 SAMPLE_RATE = 24000

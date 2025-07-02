@@ -4,6 +4,16 @@ import gc
 import inspect
 import logging
 import types
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "livekit-agents"))
+plugins_dir = ROOT / "livekit-plugins"
+for plugin in plugins_dir.iterdir():
+    if plugin.is_dir():
+        sys.path.insert(0, str(plugin))
 
 import pytest
 

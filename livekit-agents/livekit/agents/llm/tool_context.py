@@ -42,7 +42,15 @@ class NamedToolChoice(TypedDict, total=False):
     function: Required[Function]
 
 
-ToolChoice = Union[NamedToolChoice, Literal["auto", "required", "none"]]
+class ToolChoice(dict):
+    """Represents a tool selection option."""
+
+    def __init__(self, *args, **kwargs):
+        if kwargs and "type" in kwargs and "name" in kwargs:
+            super().__init__({"type": kwargs["type"], "function": {"name": kwargs["name"]}})
+        else:
+            super().__init__(*args, **kwargs)
+
 
 
 class ToolError(Exception):
@@ -214,13 +222,14 @@ class ToolContext:
         return self._tools_map.copy()
 
     def update_tools(self, tools: list[FunctionTool | RawFunctionTool]) -> None:
-        self._tools = tools.copy()
+        all_tools = tools.copy()
 
         for method in find_function_tools(self):
-            tools.append(method)
+            all_tools.append(method)
 
+        self._tools = all_tools
         self._tools_map = {}
-        for tool in tools:
+        for tool in all_tools:
             if is_raw_function_tool(tool):
                 info = get_raw_function_info(tool)
             elif is_function_tool(tool):
