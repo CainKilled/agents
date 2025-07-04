@@ -76,10 +76,11 @@ class AudioByteStream:
         if samples_per_channel is None:
             samples_per_channel = sample_rate // 10  # 100ms by default
 
-        self._bytes_per_frame = num_channels * samples_per_channel * ctypes.sizeof(ctypes.c_int16)
+        self._bytes_per_sample = num_channels * ctypes.sizeof(ctypes.c_int16)
+        self._bytes_per_frame = samples_per_channel * self._bytes_per_sample
         self._buf = bytearray()
 
-    def push(self, data: bytes) -> list[rtc.AudioFrame]:
+    def push(self, data: bytes | memoryview) -> list[rtc.AudioFrame]:
         """
         Add audio data to the buffer and retrieve fixed-size frames.
 
@@ -110,7 +111,7 @@ class AudioByteStream:
                     data=frame_data,
                     sample_rate=self._sample_rate,
                     num_channels=self._num_channels,
-                    samples_per_channel=len(frame_data) // 2,
+                    samples_per_channel=len(frame_data) // self._bytes_per_sample,
                 )
             )
 
@@ -141,14 +142,16 @@ class AudioByteStream:
             logger.warning("AudioByteStream: incomplete frame during flush, dropping")
             return []
 
-        return [
+        frames = [
             rtc.AudioFrame(
-                data=self._buf,
+                data=self._buf.copy(),
                 sample_rate=self._sample_rate,
                 num_channels=self._num_channels,
                 samples_per_channel=len(self._buf) // 2,
             )
         ]
+        self._buf.clear()
+        return frames
 
 
 async def audio_frames_from_file(
@@ -167,7 +170,7 @@ async def audio_frames_from_file(
 
     decoder = AudioStreamDecoder(sample_rate=sample_rate, num_channels=num_channels)
 
-    async def file_reader():
+    async def file_reader() -> None:
         async with aiofiles.open(file_path, mode="rb") as f:
             while True:
                 chunk = await f.read(4096)
