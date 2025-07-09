@@ -1,5 +1,6 @@
 from . import debug, duplex_unix, itertools
 from .channel import Chan, ChanClosed, ChanReceiver, ChanSender
+from .file import read_text, write_text
 from .interval import Interval, interval
 from .sleep import Sleep, SleepFinished, sleep
 from .task_set import TaskSet
@@ -23,6 +24,8 @@ __all__ = [
     "duplex_unix",
     "itertools",
     "gracefully_cancel",
+    "read_text",
+    "write_text",
 ]
 
 # Cleanup docs of unexported modules
