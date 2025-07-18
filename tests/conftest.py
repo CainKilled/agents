@@ -3,14 +3,46 @@ import dataclasses
 import gc
 import inspect
 import logging
+import sys
 import types
+from pathlib import Path
 
 import pytest
 
-from livekit.agents import DEFAULT_API_CONNECT_OPTIONS, utils
-from livekit.agents.cli import log
+try:
+    from .toxic_proxy import Toxiproxy
+except ModuleNotFoundError:  # pragma: no cover - optional dependency missing
+    class Toxiproxy:  # type: ignore
+        def __init__(self, *args, **kwargs):
+            pass
 
-from .toxic_proxy import Toxiproxy
+        def running(self) -> bool:
+            return False
+
+        def destroy_all(self) -> None:
+            pass
+
+# Ensure the repository root is on the path so that the local "livekit" package
+# can be imported during tests.
+ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT_DIR))
+
+try:
+    from livekit.agents import DEFAULT_API_CONNECT_OPTIONS, utils
+    from livekit.agents.cli import log
+except ModuleNotFoundError:  # pragma: no cover - optional dependencies missing
+    _Options = dataclasses.make_dataclass("_Options", [("retry_interval", float)])
+    DEFAULT_API_CONNECT_OPTIONS = _Options(retry_interval=0.0)
+
+    class _Dummy:
+        def __getattr__(self, name):
+            def _noop(*args, **kwargs):
+                return None
+
+            return _noop
+
+    utils = _Dummy()
+    log = _Dummy()
 
 TEST_CONNECT_OPTIONS = dataclasses.replace(DEFAULT_API_CONNECT_OPTIONS, retry_interval=0.0)
 
@@ -24,7 +56,8 @@ def job_process(event_loop):
 
 @pytest.fixture(autouse=True)
 def configure_test():
-    log._silence_noisy_loggers()
+    if hasattr(log, "_silence_noisy_loggers"):
+        log._silence_noisy_loggers()
 
 
 @pytest.fixture

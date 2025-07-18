@@ -1,7 +1,28 @@
 from livekit import rtc
 
-from . import aio, audio, codecs, http_context, hw, images
-from .audio import AudioBuffer, combine_frames, merge_frames
+from . import aio, codecs, http_context, hw, images
+
+try:
+    from . import audio
+    from .audio import AudioBuffer, combine_frames, merge_frames
+except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency missing
+    from pathlib import Path
+
+    missing_log = Path(__file__).with_name("missing_imports.log")
+    if missing_log.exists():
+        existing = missing_log.read_text()
+        missing_log.write_text(f"{existing}{exc.name}\n")
+    else:
+        missing_log.write_text(f"{exc.name}\n")
+
+    AudioBuffer = None  # type: ignore
+
+    def combine_frames(*args, _exc=exc, **kwargs):  # type: ignore
+        raise _exc
+
+    def merge_frames(*args, _exc=exc, **kwargs):  # type: ignore
+        raise _exc
+    audio = None  # type: ignore
 from .connection_pool import ConnectionPool
 from .exp_filter import ExpFilter
 from .log import log_exceptions
