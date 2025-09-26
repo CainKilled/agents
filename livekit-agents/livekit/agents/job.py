@@ -25,15 +25,14 @@ from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any, Callable
 
-import jwt
-
 from livekit import api, rtc
+from livekit.api.access_token import Claims
 from livekit.protocol import agent, models
 
 from .cli import cli
 from .ipc.inference_executor import InferenceExecutor
 from .log import logger
-from .types import NOT_GIVEN, NotGivenOr
+from .types import NotGivenOr
 from .utils import http_context, is_given, wait_for_participant
 
 _JobContextVar = contextvars.ContextVar["JobContext"]("agents_job_context")
@@ -110,7 +109,6 @@ class JobContext:
         self._on_connect = on_connect
         self._on_shutdown = on_shutdown
         self._shutdown_callbacks: list[Callable[[str], Coroutine[None, None, None]]] = []
-        self._tracing_callbacks: list[Callable[[], Coroutine[None, None, None]]] = []
         self._participant_entrypoints: list[
             tuple[
                 JobContext._PARTICIPANT_ENTRYPOINT_CALLBACK,
@@ -218,15 +216,6 @@ class JobContext:
         """
         self._log_fields = fields
 
-    def add_tracing_callback(
-        self,
-        callback: Callable[[], Coroutine[None, None, None]],
-    ) -> None:
-        """
-        Add a callback to be called when the job is about to receive a new tracing request.
-        """
-        self._tracing_callbacks.append(callback)
-
     def add_shutdown_callback(
         self,
         callback: Callable[[], Coroutine[None, None, None]]
@@ -296,7 +285,7 @@ class JobContext:
         """Deletes the room and disconnects all participants."""
         if cli.CLI_ARGUMENTS is not None and cli.CLI_ARGUMENTS.console:
             logger.warning("job_ctx.delete_room() is not executed while in console mode")
-            fut = asyncio.Future()
+            fut = asyncio.Future[api.DeleteRoomResponse]()
             fut.set_result(api.DeleteRoomResponse())
             return fut
 
@@ -331,7 +320,7 @@ class JobContext:
         """
         if cli.CLI_ARGUMENTS is not None and cli.CLI_ARGUMENTS.console:
             logger.warning("job_ctx.add_sip_participant() is not executed while in console mode")
-            fut = asyncio.Future()
+            fut = asyncio.Future[api.SIPParticipantInfo]()
             fut.set_result(api.SIPParticipantInfo())
             return fut
 
@@ -376,7 +365,7 @@ class JobContext:
             logger.warning(
                 "job_ctx.transfer_sip_participant() is not executed while in console mode"
             )
-            fut = asyncio.Future()
+            fut = asyncio.Future[api.SIPParticipantInfo]()
             fut.set_result(api.SIPParticipantInfo())
             return fut
 
@@ -442,12 +431,8 @@ class JobContext:
                 lambda _, coro=coro: self._participant_tasks.pop((p.identity, coro))  # type: ignore
             )
 
-    def decode_token(self, api_secret: NotGivenOr[str] = NOT_GIVEN) -> dict[str, Any]:
-        options = {}
-        if not is_given(api_secret):
-            options["verify_signature"] = False
-            api_secret = ""
-        return jwt.decode(self._info.token, api_secret, options=options, algorithms=["HS256"])  # type: ignore
+    def token_claims(self) -> Claims:
+        return api.TokenVerifier().verify(self._info.token, verify_signature=False)
 
 
 def _apply_auto_subscribe_opts(room: rtc.Room, auto_subscribe: AutoSubscribe) -> None:
@@ -509,7 +494,7 @@ class JobRequest:
         self,
         *,
         job: agent.Job,
-        on_reject: Callable[[], Coroutine[None, None, None]],
+        on_reject: Callable[[bool], Coroutine[None, None, None]],
         on_accept: Callable[[JobAcceptArguments], Coroutine[None, None, None]],
     ) -> None:
         self._job = job
@@ -538,8 +523,8 @@ class JobRequest:
         return self._job.agent_name
 
     async def reject(self) -> None:
-        """Reject the job request. The job may be assigned to another worker"""
-        await self._on_reject()
+        """Reject the job request. The job will not be assigned to another worker"""
+        await self._on_reject(True)
 
     async def accept(
         self,

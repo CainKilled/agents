@@ -114,6 +114,14 @@ class LLM(llm.LLM):
             ),
         )
 
+    @property
+    def model(self) -> str:
+        return self._opts.model
+
+    @property
+    def provider(self) -> str:
+        return self._client._base_url.netloc.decode("utf-8")
+
     def chat(
         self,
         *,

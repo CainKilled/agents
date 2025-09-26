@@ -7,6 +7,7 @@ from livekit.agents import (
     AgentSession,
     JobContext,
     JobProcess,
+    MetricsCollectedEvent,
     RoomInputOptions,
     RoomOutputOptions,
     RunContext,
@@ -15,7 +16,6 @@ from livekit.agents import (
     metrics,
 )
 from livekit.agents.llm import function_tool
-from livekit.agents.voice import MetricsCollectedEvent
 from livekit.plugins import deepgram, openai, silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
@@ -32,7 +32,9 @@ class MyAgent(Agent):
         super().__init__(
             instructions="Your name is Kelly. You would interact with users via voice."
             "with that in mind keep your responses concise and to the point."
-            "You are curious and friendly, and have a sense of humor.",
+            "do not use emojis, asterisks, markdown, or other special characters in your responses."
+            "You are curious and friendly, and have a sense of humor."
+            "you will speak english to the user",
         )
 
     async def on_enter(self):
@@ -78,6 +80,13 @@ async def entrypoint(ctx: JobContext):
         llm=openai.LLM(model="gpt-4o-mini"),
         stt=deepgram.STT(model="nova-3", language="multi"),
         tts=openai.TTS(voice="ash"),
+        # allow the LLM to generate a response while waiting for the end of turn
+        preemptive_generation=True,
+        # sometimes background noise could interrupt the agent session, these are considered false positive interruptions
+        # when it's detected, you may resume the agent's speech
+        resume_false_interruption=True,
+        false_interruption_timeout=1.0,
+        min_interruption_duration=0.2,  # with false interruption resume, interruption can be more sensitive
         # use LiveKit's turn detection model
         turn_detection=MultilingualModel(),
     )
@@ -106,9 +115,6 @@ async def entrypoint(ctx: JobContext):
         ),
         room_output_options=RoomOutputOptions(transcription_enabled=True),
     )
-
-    # join the room when agent is ready
-    await ctx.connect()
 
 
 if __name__ == "__main__":

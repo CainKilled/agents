@@ -24,7 +24,14 @@ from typing import Any, TypedDict
 
 import aiohttp
 
-from livekit.agents import APIConnectionError, APIConnectOptions, APITimeoutError, tts, utils
+from livekit.agents import (
+    APIConnectionError,
+    APIConnectOptions,
+    APIError,
+    APITimeoutError,
+    tts,
+    utils,
+)
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN, NotGivenOr
 from livekit.agents.utils import is_given
 
@@ -160,6 +167,14 @@ class TTS(tts.TTS):
         )
         self._session = http_session
 
+    @property
+    def model(self) -> str:
+        return "Octave"
+
+    @property
+    def provider(self) -> str:
+        return "Hume"
+
     def _ensure_session(self) -> aiohttp.ClientSession:
         if not self._session:
             self._session = utils.http_context.http_session()
@@ -265,6 +280,9 @@ class ChunkedStream(tts.ChunkedStream):
                         continue
 
                     data = json.loads(line.decode())
+                    if data.get("type") == "error":
+                        raise APIError(message=str(data))
+
                     audio_b64 = data.get("audio")
                     if audio_b64:
                         output_emitter.push(base64.b64decode(audio_b64))

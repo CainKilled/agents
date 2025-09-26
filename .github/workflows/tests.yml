@@ -14,7 +14,6 @@ permissions:
   actions: write
 
 jobs:
-
   unit-tests:
     runs-on: ubuntu-latest
     steps:
@@ -27,21 +26,47 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: "3.12"
 
       - name: Install the project
         run: uv sync --all-extras --dev
 
       - name: Run tests
+
         run: uv run pytest tests/test_agent_session.py
-                  tests/test_tts_fallback.py
-                  tests/test_stt_fallback.py
-                  tests/test_aio.py
-                  tests/test_chat_ctx.py
-                  tests/test_config.py
-                  tests/test_schema_gemini.py
-                  tests/test_tokenizer.py
-                  tests/test_transcription_filter.py
+          tests/test_tts_fallback.py
+          tests/test_stt_fallback.py
+          tests/test_aio.py
+          tests/test_chat_ctx.py
+          tests/test_config.py
+          tests/test_schema_gemini.py
+          tests/test_tokenizer.py
+          tests/test_transcription_filter.py
+
+  evaluation:
+    # don't run tests for PRs on forks
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the project
+        run: uv sync --all-extras --dev
+
+      - name: Run evals
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+        run: uv run pytest tests/test_workflows.py tests/test_evals.py
 
   tests:
     # don't run tests for PRs on forks
@@ -49,7 +74,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [cartesia, aws, azure, deepgram, elevenlabs, google, groq, resemble, openai, mistralai, rime, speechify, hume, inworld]
+        plugin:
+          [
+            cartesia,
+            aws,
+            azure,
+            deepgram,
+            elevenlabs,
+            google,
+            groq,
+            openai,
+            rime,
+            speechify,
+            hume,
+            inworld,
+            soniox,
+          ]
 
     runs-on: ubuntu-latest
     name: livekit-plugins-${{ matrix.plugin }}
@@ -96,6 +136,7 @@ jobs:
           SPITCH_API_KEY: ${{ secrets.SPITCH_API_KEY }}
           LMNT_API_KEY: ${{ secrets.LMNT_API_KEY }}
           INWORLD_API_KEY: ${{ secrets.INWORLD_API_KEY }}
+          SONIOX_API_KEY: ${{ secrets.SONIOX_API_KEY }}
         working-directory: tests
         run: make test
 
@@ -106,8 +147,7 @@ jobs:
           name: lk-dump-${{ matrix.plugin }}
           path: lk_dump/**
           if-no-files-found: ignore
-          retention-days: 1 
-
+          retention-days: 1
 
   aggregate-dumps:
     if: always()

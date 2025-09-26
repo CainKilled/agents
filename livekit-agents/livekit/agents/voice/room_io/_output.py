@@ -25,27 +25,41 @@ class _ParticipantAudioOutput(io.AudioOutput):
         sample_rate: int,
         num_channels: int,
         track_publish_options: rtc.TrackPublishOptions,
-        queue_size_ms: int = 100_000,  # TODO(long): move buffer to python
+        track_name: str = "roomio_audio",
     ) -> None:
-        super().__init__(next_in_chain=None, sample_rate=sample_rate)
+        super().__init__(
+            label="RoomIO",
+            next_in_chain=None,
+            sample_rate=sample_rate,
+            capabilities=io.AudioOutputCapabilities(pause=True),
+        )
         self._room = room
+        self._track_name = track_name
         self._lock = asyncio.Lock()
-        self._audio_source = rtc.AudioSource(sample_rate, num_channels, queue_size_ms)
+        self._audio_source = rtc.AudioSource(sample_rate, num_channels, queue_size_ms=200)
         self._publish_options = track_publish_options
         self._publication: rtc.LocalTrackPublication | None = None
         self._subscribed_fut = asyncio.Future[None]()
+
+        self._audio_buf = utils.aio.Chan[rtc.AudioFrame]()
+        self._audio_bstream = utils.audio.AudioByteStream(
+            sample_rate, num_channels, samples_per_channel=sample_rate // 20
+        )  # chunk the frame into a small, fixed size
 
         # used to republish track on reconnection
         self._republish_task: asyncio.Task[None] | None = None
         self._flush_task: asyncio.Task[None] | None = None
         self._interrupted_event = asyncio.Event()
+        self._forwarding_task: asyncio.Task[None] | None = None
 
         self._pushed_duration: float = 0.0
-        self._interrupted: bool = False
+
+        self._playback_enabled = asyncio.Event()
+        self._playback_enabled.set()
 
     async def _publish_track(self) -> None:
         async with self._lock:
-            track = rtc.LocalAudioTrack.create_audio_track("roomio_audio", self._audio_source)
+            track = rtc.LocalAudioTrack.create_audio_track(self._track_name, self._audio_source)
             self._publication = await self._room.local_participant.publish_track(
                 track, self._publish_options
             )
@@ -58,6 +72,7 @@ class _ParticipantAudioOutput(io.AudioOutput):
         return self._subscribed_fut
 
     async def start(self) -> None:
+        self._forwarding_task = asyncio.create_task(self._forward_audio())
         await self._publish_track()
         self._room.on("reconnected", self._on_reconnected)
 
@@ -67,6 +82,8 @@ class _ParticipantAudioOutput(io.AudioOutput):
             await utils.aio.cancel_and_wait(self._republish_task)
         if self._flush_task:
             await utils.aio.cancel_and_wait(self._flush_task)
+        if self._forwarding_task:
+            await utils.aio.cancel_and_wait(self._forwarding_task)
 
         await self._audio_source.aclose()
 
@@ -79,11 +96,16 @@ class _ParticipantAudioOutput(io.AudioOutput):
             logger.error("capture_frame called while flush is in progress")
             await self._flush_task
 
-        self._pushed_duration += frame.duration
-        await self._audio_source.capture_frame(frame)
+        for f in self._audio_bstream.push(frame.data):
+            await self._audio_buf.send(f)
+            self._pushed_duration += f.duration
 
     def flush(self) -> None:
         super().flush()
+
+        for f in self._audio_bstream.flush():
+            self._audio_buf.send_nowait(f)
+            self._pushed_duration += f.duration
 
         if not self._pushed_duration:
             return
@@ -96,13 +118,32 @@ class _ParticipantAudioOutput(io.AudioOutput):
         self._flush_task = asyncio.create_task(self._wait_for_playout())
 
     def clear_buffer(self) -> None:
+        self._audio_bstream.clear()
+
         if not self._pushed_duration:
             return
         self._interrupted_event.set()
 
+    def pause(self) -> None:
+        super().pause()
+        self._playback_enabled.clear()
+        # self._audio_source.clear_queue()
+
+    def resume(self) -> None:
+        super().resume()
+        self._playback_enabled.set()
+
     async def _wait_for_playout(self) -> None:
         wait_for_interruption = asyncio.create_task(self._interrupted_event.wait())
-        wait_for_playout = asyncio.create_task(self._audio_source.wait_for_playout())
+
+        async def _wait_buffered_audio() -> None:
+            while not self._audio_buf.empty():
+                if not self._playback_enabled.is_set():
+                    await self._playback_enabled.wait()
+
+                await self._audio_source.wait_for_playout()
+
+        wait_for_playout = asyncio.create_task(_wait_buffered_audio())
         await asyncio.wait(
             [wait_for_playout, wait_for_interruption],
             return_when=asyncio.FIRST_COMPLETED,
@@ -112,7 +153,11 @@ class _ParticipantAudioOutput(io.AudioOutput):
         pushed_duration = self._pushed_duration
 
         if interrupted:
-            pushed_duration = max(pushed_duration - self._audio_source.queued_duration, 0)
+            queued_duration = self._audio_source.queued_duration
+            while not self._audio_buf.empty():
+                queued_duration += self._audio_buf.recv_nowait().duration
+
+            pushed_duration = max(pushed_duration - queued_duration, 0)
             self._audio_source.clear_queue()
             wait_for_playout.cancel()
         else:
@@ -122,13 +167,30 @@ class _ParticipantAudioOutput(io.AudioOutput):
         self._interrupted_event.clear()
         self.on_playback_finished(playback_position=pushed_duration, interrupted=interrupted)
 
+    async def _forward_audio(self) -> None:
+        async for frame in self._audio_buf:
+            if not self._playback_enabled.is_set():
+                self._audio_source.clear_queue()
+                await self._playback_enabled.wait()
+                # TODO(long): save the frames in the queue and play them later
+                # TODO(long): ignore frames from previous syllable
+
+            if self._interrupted_event.is_set() or self._pushed_duration == 0:
+                if self._interrupted_event.is_set() and self._flush_task:
+                    await self._flush_task
+
+                # ignore frames if interrupted
+                continue
+
+            await self._audio_source.capture_frame(frame)
+
     def _on_reconnected(self) -> None:
         if self._republish_task:
             self._republish_task.cancel()
         self._republish_task = asyncio.create_task(self._publish_track())
 
 
-class _ParticipantLegacyTranscriptionOutput(io.TextOutput):
+class _ParticipantLegacyTranscriptionOutput:
     def __init__(
         self,
         room: rtc.Room,
@@ -136,7 +198,6 @@ class _ParticipantLegacyTranscriptionOutput(io.TextOutput):
         is_delta_stream: bool = True,
         participant: rtc.Participant | str | None = None,
     ):
-        super().__init__(next_in_chain=None)
         self._room, self._is_delta_stream = room, is_delta_stream
         self._track_id: str | None = None
         self._participant_identity: str | None = None
@@ -275,18 +336,19 @@ class _ParticipantLegacyTranscriptionOutput(io.TextOutput):
         return False
 
 
-class _ParticipantTranscriptionOutput(io.TextOutput):
+class _ParticipantStreamTranscriptionOutput:
     def __init__(
         self,
         room: rtc.Room,
         *,
         is_delta_stream: bool = True,
         participant: rtc.Participant | str | None = None,
+        attributes: dict[str, str] | None = None,
     ):
-        super().__init__(next_in_chain=None)
         self._room, self._is_delta_stream = room, is_delta_stream
         self._track_id: str | None = None
         self._participant_identity: str | None = None
+        self._additional_attributes = attributes or {}
 
         self._writer: rtc.TextStreamWriter | None = None
 
@@ -334,6 +396,10 @@ class _ParticipantTranscriptionOutput(io.TextOutput):
                 attributes[ATTRIBUTE_TRANSCRIPTION_TRACK_ID] = self._track_id
         attributes[ATTRIBUTE_TRANSCRIPTION_SEGMENT_ID] = self._current_id
 
+        for key, val in self._additional_attributes.items():
+            if key not in attributes:
+                attributes[key] = val
+
         return await self._room.local_participant.stream_text(
             topic=TOPIC_TRANSCRIPTION,
             sender_identity=self._participant_identity,
@@ -369,9 +435,7 @@ class _ParticipantTranscriptionOutput(io.TextOutput):
             logger.warning("failed to publish transcription", exc_info=e)
 
     async def _flush_task(self, writer: rtc.TextStreamWriter | None) -> None:
-        attributes = {
-            ATTRIBUTE_TRANSCRIPTION_FINAL: "true",
-        }
+        attributes = {ATTRIBUTE_TRANSCRIPTION_FINAL: "true"}
         if self._track_id:
             attributes[ATTRIBUTE_TRANSCRIPTION_TRACK_ID] = self._track_id
 
@@ -420,16 +484,45 @@ class _ParticipantTranscriptionOutput(io.TextOutput):
 
 
 # Keep this utility private for now
-class _ParallelTextOutput(io.TextOutput):
+class _ParticipantTranscriptionOutput(io.TextOutput):
     def __init__(
-        self, sinks: list[io.TextOutput], *, next_in_chain: io.TextOutput | None = None
+        self,
+        *,
+        room: rtc.Room,
+        is_delta_stream: bool = True,
+        participant: rtc.Participant | str | None = None,
+        next_in_chain: io.TextOutput | None = None,
     ) -> None:
-        super().__init__(next_in_chain=next_in_chain)
-        self._sinks = sinks
+        super().__init__(label="RoomIO", next_in_chain=next_in_chain)
+
+        self.__outputs: list[
+            _ParticipantLegacyTranscriptionOutput | _ParticipantStreamTranscriptionOutput
+        ] = [
+            _ParticipantLegacyTranscriptionOutput(
+                room=room,
+                is_delta_stream=is_delta_stream,
+                participant=participant,
+            ),
+            _ParticipantStreamTranscriptionOutput(
+                room=room,
+                is_delta_stream=is_delta_stream,
+                participant=participant,
+            ),
+        ]
+
+    def set_participant(self, participant: rtc.Participant | str | None) -> None:
+        for source in self.__outputs:
+            source.set_participant(participant)
 
     async def capture_text(self, text: str) -> None:
-        await asyncio.gather(*[sink.capture_text(text) for sink in self._sinks])
+        await asyncio.gather(*[sink.capture_text(text) for sink in self.__outputs])
+
+        if self.next_in_chain:
+            await self.next_in_chain.capture_text(text)
 
     def flush(self) -> None:
-        for sink in self._sinks:
-            sink.flush()
+        for source in self.__outputs:
+            source.flush()
+
+        if self.next_in_chain:
+            self.next_in_chain.flush()

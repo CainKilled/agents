@@ -19,6 +19,7 @@ import dataclasses
 import json
 import os
 import weakref
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
@@ -44,8 +45,6 @@ from ._utils import PeriodicCollector, _to_deepgram_url
 from .log import logger
 from .models import DeepgramLanguages, DeepgramModels
 
-BASE_URL = "https://api.deepgram.com/v1/listen"
-
 
 @dataclass
 class STTOptions:
@@ -57,12 +56,14 @@ class STTOptions:
     smart_format: bool
     no_delay: bool
     endpointing_ms: int
+    enable_diarization: bool
     filler_words: bool
     sample_rate: int
     num_channels: int
     keywords: list[tuple[str, float]]
     keyterms: list[str]
     profanity_filter: bool
+    endpoint_url: str
     numerals: bool = False
     mip_opt_out: bool = False
     tags: NotGivenOr[list[str]] = NOT_GIVEN
@@ -81,6 +82,7 @@ class STT(stt.STT):
         sample_rate: int = 16000,
         no_delay: bool = True,
         endpointing_ms: int = 25,
+        enable_diarization: bool = False,
         # enable filler words by default to improve turn detector accuracy
         filler_words: bool = True,
         keywords: NotGivenOr[list[tuple[str, float]]] = NOT_GIVEN,
@@ -89,7 +91,7 @@ class STT(stt.STT):
         profanity_filter: bool = False,
         api_key: NotGivenOr[str] = NOT_GIVEN,
         http_session: aiohttp.ClientSession | None = None,
-        base_url: str = BASE_URL,
+        base_url: str = "https://api.deepgram.com/v1/listen",
         numerals: bool = False,
         mip_opt_out: bool = False,
     ) -> None:
@@ -128,9 +130,10 @@ class STT(stt.STT):
         """  # noqa: E501
 
         super().__init__(
-            capabilities=stt.STTCapabilities(streaming=True, interim_results=interim_results)
+            capabilities=stt.STTCapabilities(
+                streaming=True, interim_results=interim_results, diarization=enable_diarization
+            )
         )
-        self._base_url = base_url
 
         deepgram_api_key = api_key if is_given(api_key) else os.environ.get("DEEPGRAM_API_KEY")
         if not deepgram_api_key:
@@ -149,6 +152,7 @@ class STT(stt.STT):
             smart_format=smart_format,
             no_delay=no_delay,
             endpointing_ms=endpointing_ms,
+            enable_diarization=enable_diarization,
             filler_words=filler_words,
             sample_rate=sample_rate,
             num_channels=1,
@@ -158,9 +162,18 @@ class STT(stt.STT):
             numerals=numerals,
             mip_opt_out=mip_opt_out,
             tags=_validate_tags(tags) if is_given(tags) else [],
+            endpoint_url=base_url,
         )
         self._session = http_session
         self._streams = weakref.WeakSet[SpeechStream]()
+
+    @property
+    def model(self) -> str:
+        return self._opts.model
+
+    @property
+    def provider(self) -> str:
+        return "Deepgram"
 
     def _ensure_session(self) -> aiohttp.ClientSession:
         if not self._session:
@@ -186,12 +199,15 @@ class STT(stt.STT):
             "profanity_filter": config.profanity_filter,
             "numerals": config.numerals,
         }
+        if config.enable_diarization:
+            logger.warning("speaker diarization is not supported in non-streaming mode, ignoring")
+
         if config.language:
             recognize_config["language"] = config.language
 
         try:
             async with self._ensure_session().post(
-                url=_to_deepgram_url(recognize_config, self._base_url, websocket=False),
+                url=_to_deepgram_url(recognize_config, self._opts.endpoint_url, websocket=False),
                 data=rtc.combine_audio_frames(buffer).to_wav_bytes(),
                 headers={
                     "Authorization": f"Token {self._api_key}",
@@ -233,7 +249,7 @@ class STT(stt.STT):
             opts=config,
             api_key=self._api_key,
             http_session=self._ensure_session(),
-            base_url=self._base_url,
+            base_url=self._opts.endpoint_url,
         )
         self._streams.add(stream)
         return stream
@@ -249,6 +265,7 @@ class STT(stt.STT):
         sample_rate: NotGivenOr[int] = NOT_GIVEN,
         no_delay: NotGivenOr[bool] = NOT_GIVEN,
         endpointing_ms: NotGivenOr[int] = NOT_GIVEN,
+        enable_diarization: NotGivenOr[bool] = NOT_GIVEN,
         filler_words: NotGivenOr[bool] = NOT_GIVEN,
         keywords: NotGivenOr[list[tuple[str, float]]] = NOT_GIVEN,
         keyterms: NotGivenOr[list[str]] = NOT_GIVEN,
@@ -256,6 +273,7 @@ class STT(stt.STT):
         numerals: NotGivenOr[bool] = NOT_GIVEN,
         mip_opt_out: NotGivenOr[bool] = NOT_GIVEN,
         tags: NotGivenOr[list[str]] = NOT_GIVEN,
+        endpoint_url: NotGivenOr[str] = NOT_GIVEN,
     ) -> None:
         if is_given(language):
             self._opts.language = language
@@ -273,6 +291,8 @@ class STT(stt.STT):
             self._opts.no_delay = no_delay
         if is_given(endpointing_ms):
             self._opts.endpointing_ms = endpointing_ms
+        if is_given(enable_diarization):
+            self._opts.enable_diarization = enable_diarization
         if is_given(filler_words):
             self._opts.filler_words = filler_words
         if is_given(keywords):
@@ -287,6 +307,8 @@ class STT(stt.STT):
             self._opts.mip_opt_out = mip_opt_out
         if is_given(tags):
             self._opts.tags = _validate_tags(tags)
+        if is_given(endpoint_url):
+            self._opts.endpoint_url = endpoint_url
 
         for stream in self._streams:
             stream.update_options(
@@ -304,6 +326,7 @@ class STT(stt.STT):
                 profanity_filter=profanity_filter,
                 numerals=numerals,
                 mip_opt_out=mip_opt_out,
+                endpoint_url=endpoint_url,
             )
 
     def _sanitize_options(
@@ -344,7 +367,7 @@ class SpeechStream(stt.SpeechStream):
         self._opts = opts
         self._api_key = api_key
         self._session = http_session
-        self._base_url = base_url
+        self._opts.endpoint_url = base_url
         self._speaking = False
         self._audio_duration_collector = PeriodicCollector(
             callback=self._on_audio_duration_report,
@@ -365,6 +388,7 @@ class SpeechStream(stt.SpeechStream):
         sample_rate: NotGivenOr[int] = NOT_GIVEN,
         no_delay: NotGivenOr[bool] = NOT_GIVEN,
         endpointing_ms: NotGivenOr[int] = NOT_GIVEN,
+        enable_diarization: NotGivenOr[bool] = NOT_GIVEN,
         filler_words: NotGivenOr[bool] = NOT_GIVEN,
         keywords: NotGivenOr[list[tuple[str, float]]] = NOT_GIVEN,
         keyterms: NotGivenOr[list[str]] = NOT_GIVEN,
@@ -372,6 +396,7 @@ class SpeechStream(stt.SpeechStream):
         numerals: NotGivenOr[bool] = NOT_GIVEN,
         mip_opt_out: NotGivenOr[bool] = NOT_GIVEN,
         tags: NotGivenOr[list[str]] = NOT_GIVEN,
+        endpoint_url: NotGivenOr[str] = NOT_GIVEN,
     ) -> None:
         if is_given(language):
             self._opts.language = language
@@ -389,6 +414,8 @@ class SpeechStream(stt.SpeechStream):
             self._opts.no_delay = no_delay
         if is_given(endpointing_ms):
             self._opts.endpointing_ms = endpointing_ms
+        if is_given(enable_diarization):
+            self._opts.enable_diarization = enable_diarization
         if is_given(filler_words):
             self._opts.filler_words = filler_words
         if is_given(keywords):
@@ -403,6 +430,8 @@ class SpeechStream(stt.SpeechStream):
             self._opts.mip_opt_out = mip_opt_out
         if is_given(tags):
             self._opts.tags = _validate_tags(tags)
+        if is_given(endpoint_url):
+            self._opts.endpoint_url = endpoint_url
 
         self._reconnect_event.set()
 
@@ -533,6 +562,8 @@ class SpeechStream(stt.SpeechStream):
             "numerals": self._opts.numerals,
             "mip_opt_out": self._opts.mip_opt_out,
         }
+        if self._opts.enable_diarization:
+            live_config["diarize"] = True
         if self._opts.keywords:
             live_config["keywords"] = self._opts.keywords
         if self._opts.keyterms:
@@ -549,7 +580,7 @@ class SpeechStream(stt.SpeechStream):
         try:
             ws = await asyncio.wait_for(
                 self._session.ws_connect(
-                    _to_deepgram_url(live_config, base_url=self._base_url, websocket=True),
+                    _to_deepgram_url(live_config, base_url=self._opts.endpoint_url, websocket=True),
                     headers={"Authorization": f"Token {self._api_key}"},
                 ),
                 self._conn_options.timeout,
@@ -592,7 +623,9 @@ class SpeechStream(stt.SpeechStream):
             is_endpoint = data["speech_final"]
             self._request_id = request_id
 
-            alts = live_transcription_to_speech_data(self._opts.language, data)
+            alts = live_transcription_to_speech_data(
+                self._opts.language, data, is_final=is_final_transcript
+            )
             # If, for some reason, we didn't get a SpeechStarted event but we got
             # a transcript with text, we should start speaking. It's rare but has
             # been observed.
@@ -630,17 +663,27 @@ class SpeechStream(stt.SpeechStream):
             logger.warning("received unexpected message from deepgram %s", data)
 
 
-def live_transcription_to_speech_data(language: str, data: dict) -> list[stt.SpeechData]:
+def live_transcription_to_speech_data(
+    language: str, data: dict, *, is_final: bool
+) -> list[stt.SpeechData]:
     dg_alts = data["channel"]["alternatives"]
 
     speech_data = []
     for alt in dg_alts:
+        if is_final:
+            speakers = [word["speaker"] for word in alt["words"] if "speaker" in word]
+            speaker = Counter(speakers).most_common(1)[0][0] if speakers else None
+        else:
+            # interim result doesn't have correct speaker information?
+            speaker = None
+
         sd = stt.SpeechData(
             language=language,
             start_time=alt["words"][0]["start"] if alt["words"] else 0,
             end_time=alt["words"][-1]["end"] if alt["words"] else 0,
             confidence=alt["confidence"],
             text=alt["transcript"],
+            speaker_id=f"S{speaker}" if speaker is not None else None,
         )
         if language == "multi" and "languages" in alt:
             sd.language = alt["languages"][0]  # TODO: handle multiple languages
@@ -654,12 +697,12 @@ def prerecorded_transcription_to_speech_event(
 ) -> stt.SpeechEvent:
     # We only support one channel for now
     request_id = data["metadata"]["request_id"]
-    channel = data["results"]["channels"][0]
+    channel: dict = data["results"]["channels"][0]
     dg_alts = channel["alternatives"]
 
     # Use the detected language if enabled
     # https://developers.deepgram.com/docs/language-detection
-    detected_language = channel.get("detected_language")
+    detected_language = channel.get("detected_language", "")
 
     return stt.SpeechEvent(
         request_id=request_id,
@@ -723,7 +766,10 @@ def _validate_keyterms(
         )
 
     if is_given(keyterms) and (
-        (model.startswith("nova-3") and language not in ("en-US", "en"))
+        (
+            model.startswith("nova-3")
+            and language not in ("en-US", "en", "de", "nl", "sv", "sv-SE", "da", "da-DK")
+        )
         or not model.startswith("nova-3")
     ):
         raise ValueError(

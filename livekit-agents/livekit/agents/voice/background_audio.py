@@ -69,6 +69,7 @@ class BackgroundAudioPlayer:
         thinking_sound: NotGivenOr[
             AudioSource | AudioConfig | list[AudioConfig] | None
         ] = NOT_GIVEN,
+        stream_timeout_ms: int = 200,
     ) -> None:
         """
         Initializes the BackgroundAudio component with optional ambient and thinking sounds.
@@ -99,9 +100,9 @@ class BackgroundAudioPlayer:
 
         self._audio_source = rtc.AudioSource(48000, 1, queue_size_ms=_AUDIO_SOURCE_BUFFER_MS)
         self._audio_mixer = rtc.AudioMixer(
-            48000, 1, blocksize=4800, capacity=1, stream_timeout_ms=200
+            48000, 1, blocksize=4800, capacity=1, stream_timeout_ms=stream_timeout_ms
         )
-        self._publication: rtc.LocalTrackPublication | None = None
+        self.publication: rtc.LocalTrackPublication | None = None
         self._lock = asyncio.Lock()
 
         self._republish_task: asyncio.Task[None] | None = None  # republish the task on reconnect
@@ -296,14 +297,14 @@ class BackgroundAudioPlayer:
             self._room.off("reconnected", self._on_reconnected)
 
             with contextlib.suppress(Exception):
-                if self._publication is not None:
-                    await self._room.local_participant.unpublish_track(self._publication.sid)
+                if self.publication is not None:
+                    await self._room.local_participant.unpublish_track(self.publication.sid)
 
     def _on_reconnected(self) -> None:
         if self._republish_task:
             self._republish_task.cancel()
 
-        self._publication = None
+        self.publication = None
         self._republish_task = asyncio.create_task(self._republish_track_task())
 
     def _agent_state_changed(self, ev: AgentStateChangedEvent) -> None:
@@ -371,11 +372,11 @@ class BackgroundAudioPlayer:
             await self._audio_source.capture_frame(frame)
 
     async def _publish_track(self) -> None:
-        if self._publication is not None:
+        if self.publication is not None:
             return
 
         track = rtc.LocalAudioTrack.create_audio_track("background_audio", self._audio_source)
-        self._publication = await self._room.local_participant.publish_track(
+        self.publication = await self._room.local_participant.publish_track(
             track, self._track_publish_options or rtc.TrackPublishOptions()
         )
 

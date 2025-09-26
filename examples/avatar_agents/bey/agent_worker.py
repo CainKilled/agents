@@ -13,10 +13,9 @@ load_dotenv()
 
 
 async def entrypoint(ctx: JobContext):
-    await ctx.connect()
-
     session = AgentSession(
         llm=openai.realtime.RealtimeModel(voice="alloy"),
+        resume_false_interruption=False,
     )
 
     avatar_id = os.getenv("BEY_AVATAR_ID")

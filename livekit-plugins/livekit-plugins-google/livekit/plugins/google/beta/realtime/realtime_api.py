@@ -8,13 +8,14 @@ import time
 import weakref
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from typing import Literal
 
-from google import genai
-from google.genai import types
+from google.genai import Client as GenAIClient, types
 from google.genai.live import AsyncSession
 from livekit import rtc
 from livekit.agents import APIConnectionError, llm, utils
 from livekit.agents.metrics import RealtimeModelMetrics
+from livekit.agents.metrics.base import Metadata
 from livekit.agents.types import (
     DEFAULT_API_CONNECT_OPTIONS,
     NOT_GIVEN,
@@ -52,7 +53,7 @@ class _RealtimeOptions:
     api_key: str | None
     voice: Voice | str
     language: NotGivenOr[str]
-    response_modalities: NotGivenOr[list[types.Modality]]
+    response_modalities: list[types.Modality]
     vertexai: bool
     project: str | None
     location: str | None
@@ -75,6 +76,8 @@ class _RealtimeOptions:
     context_window_compression: NotGivenOr[types.ContextWindowCompressionConfig] = NOT_GIVEN
     api_version: NotGivenOr[str] = NOT_GIVEN
     gemini_tools: NotGivenOr[list[_LLMTool]] = NOT_GIVEN
+    tool_behavior: NotGivenOr[types.Behavior] = NOT_GIVEN
+    tool_response_scheduling: NotGivenOr[types.FunctionResponseScheduling] = NOT_GIVEN
 
 
 @dataclass
@@ -135,6 +138,8 @@ class RealtimeModel(llm.RealtimeModel):
         proactivity: NotGivenOr[bool] = NOT_GIVEN,
         realtime_input_config: NotGivenOr[types.RealtimeInputConfig] = NOT_GIVEN,
         context_window_compression: NotGivenOr[types.ContextWindowCompressionConfig] = NOT_GIVEN,
+        tool_behavior: NotGivenOr[types.Behavior] = NOT_GIVEN,
+        tool_response_scheduling: NotGivenOr[types.FunctionResponseScheduling] = NOT_GIVEN,
         api_version: NotGivenOr[str] = NOT_GIVEN,
         conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS,
         http_options: NotGivenOr[types.HttpOptions] = NOT_GIVEN,
@@ -173,6 +178,8 @@ class RealtimeModel(llm.RealtimeModel):
             proactivity (bool, optional): Whether to enable proactive audio. Defaults to False.
             realtime_input_config (RealtimeInputConfig, optional): The configuration for realtime input. Defaults to None.
             context_window_compression (ContextWindowCompressionConfig, optional): The configuration for context window compression. Defaults to None.
+            tool_behavior (Behavior, optional): The behavior for tool call. Default behavior is BLOCK in Gemini Realtime API.
+            tool_response_scheduling (FunctionResponseScheduling, optional): The scheduling for tool response. Default scheduling is WHEN_IDLE.
             conn_options (APIConnectOptions, optional): The configuration for the API connection. Defaults to DEFAULT_API_CONNECT_OPTIONS.
             _gemini_tools (list[LLMTool], optional): Gemini-specific tools to use for the session. This parameter is experimental and may change.
 
@@ -192,12 +199,16 @@ class RealtimeModel(llm.RealtimeModel):
         ):
             server_turn_detection = False
 
+        modalities = modalities if is_given(modalities) else [types.Modality.AUDIO]
+
         super().__init__(
             capabilities=llm.RealtimeCapabilities(
                 message_truncation=False,
                 turn_detection=server_turn_detection,
                 user_transcription=input_audio_transcription is not None,
                 auto_tool_reply_generation=True,
+                audio_output=types.Modality.AUDIO in modalities,
+                manual_function_calls=False,
             )
         )
 
@@ -260,11 +271,23 @@ class RealtimeModel(llm.RealtimeModel):
             context_window_compression=context_window_compression,
             api_version=api_version,
             gemini_tools=_gemini_tools,
+            tool_behavior=tool_behavior,
             conn_options=conn_options,
             http_options=http_options,
         )
 
         self._sessions = weakref.WeakSet[RealtimeSession]()
+
+    @property
+    def model(self) -> str:
+        return self._opts.model
+
+    @property
+    def provider(self) -> str:
+        if self._opts.vertexai:
+            return "Vertex AI"
+        else:
+            return "Gemini"
 
     def session(self) -> RealtimeSession:
         sess = RealtimeSession(self)
@@ -276,6 +299,8 @@ class RealtimeModel(llm.RealtimeModel):
         *,
         voice: NotGivenOr[str] = NOT_GIVEN,
         temperature: NotGivenOr[float] = NOT_GIVEN,
+        tool_behavior: NotGivenOr[types.Behavior] = NOT_GIVEN,
+        tool_response_scheduling: NotGivenOr[types.FunctionResponseScheduling] = NOT_GIVEN,
     ) -> None:
         """
         Update the options for the RealtimeModel.
@@ -291,10 +316,18 @@ class RealtimeModel(llm.RealtimeModel):
         if is_given(temperature):
             self._opts.temperature = temperature
 
+        if is_given(tool_behavior):
+            self._opts.tool_behavior = tool_behavior
+
+        if is_given(tool_response_scheduling):
+            self._opts.tool_response_scheduling = tool_response_scheduling
+
         for sess in self._sessions:
             sess.update_options(
                 voice=self._opts.voice,
                 temperature=self._opts.temperature,
+                tool_behavior=self._opts.tool_behavior,
+                tool_response_scheduling=self._opts.tool_response_scheduling,
             )
 
     async def aclose(self) -> None:
@@ -328,7 +361,7 @@ class RealtimeSession(llm.RealtimeSession):
         if api_version:
             http_options.api_version = api_version
 
-        self._client = genai.Client(
+        self._client = GenAIClient(
             api_key=self._opts.api_key,
             vertexai=self._opts.vertexai,
             project=self._opts.project,
@@ -372,6 +405,8 @@ class RealtimeSession(llm.RealtimeSession):
         voice: NotGivenOr[str] = NOT_GIVEN,
         temperature: NotGivenOr[float] = NOT_GIVEN,
         tool_choice: NotGivenOr[llm.ToolChoice | None] = NOT_GIVEN,
+        tool_behavior: NotGivenOr[types.Behavior] = NOT_GIVEN,
+        tool_response_scheduling: NotGivenOr[types.FunctionResponseScheduling] = NOT_GIVEN,
     ) -> None:
         should_restart = False
         if is_given(voice) and self._opts.voice != voice:
@@ -381,6 +416,20 @@ class RealtimeSession(llm.RealtimeSession):
         if is_given(temperature) and self._opts.temperature != temperature:
             self._opts.temperature = temperature if is_given(temperature) else NOT_GIVEN
             should_restart = True
+
+        if is_given(tool_behavior) and self._opts.tool_behavior != tool_behavior:
+            self._opts.tool_behavior = tool_behavior
+            should_restart = True
+
+        if (
+            is_given(tool_response_scheduling)
+            and self._opts.tool_response_scheduling != tool_response_scheduling
+        ):
+            self._opts.tool_response_scheduling = tool_response_scheduling
+            # no need to restart
+
+        if is_given(tool_choice):
+            logger.warning("tool_choice is not supported by the Google Realtime API.")
 
         if should_restart:
             self._mark_restart_needed()
@@ -413,7 +462,11 @@ class RealtimeSession(llm.RealtimeSession):
             ).to_provider_format(format="google", inject_dummy_user_message=False)
             # we are not generating, and do not need to inject
             turns = [types.Content.model_validate(turn) for turn in turns_dict]
-            tool_results = get_tool_results_for_realtime(append_ctx, vertexai=self._opts.vertexai)
+            tool_results = get_tool_results_for_realtime(
+                append_ctx,
+                vertexai=self._opts.vertexai,
+                tool_response_scheduling=self._opts.tool_response_scheduling,
+            )
             if turns:
                 self._send_client_event(types.LiveClientContent(turns=turns, turn_complete=False))
             if tool_results:
@@ -424,7 +477,9 @@ class RealtimeSession(llm.RealtimeSession):
         self._chat_ctx = chat_ctx.copy()
 
     async def update_tools(self, tools: list[llm.FunctionTool | llm.RawFunctionTool]) -> None:
-        new_declarations: list[types.FunctionDeclaration] = to_fnc_ctx(tools)
+        new_declarations: list[types.FunctionDeclaration] = to_fnc_ctx(
+            tools, use_parameters_json_schema=False, tool_behavior=self._opts.tool_behavior
+        )
         current_tool_names = {f.name for f in self._gemini_declarations}
         new_tool_names = {f.name for f in new_declarations}
 
@@ -538,7 +593,14 @@ class RealtimeSession(llm.RealtimeSession):
             return
         self.start_user_activity()
 
-    def truncate(self, *, message_id: str, audio_end_ms: int) -> None:
+    def truncate(
+        self,
+        *,
+        message_id: str,
+        modalities: list[Literal["text", "audio"]],
+        audio_end_ms: int,
+        audio_transcript: NotGivenOr[str] = NOT_GIVEN,
+    ) -> None:
         logger.warning("truncate is not supported by the Google Realtime API.")
         pass
 
@@ -688,10 +750,15 @@ class RealtimeSession(llm.RealtimeSession):
                         break
 
                 async for response in session.receive():
-                    if (not self._current_generation or self._current_generation._done) and (
-                        response.server_content or response.tool_call
-                    ):
-                        self._start_new_generation()
+                    if not self._current_generation or self._current_generation._done:
+                        if response.server_content and response.server_content.interrupted:
+                            # interrupt a generation already done
+                            self._handle_input_speech_started()
+                            # reset the flag and still start a new generation in case it has any other content
+                            response.server_content.interrupted = False
+
+                        if self._is_new_generation(response):
+                            self._start_new_generation()
 
                     if response.session_resumption_update:
                         if (
@@ -732,9 +799,7 @@ class RealtimeSession(llm.RealtimeSession):
             gemini_tools=self._opts.gemini_tools if is_given(self._opts.gemini_tools) else None,
         )
         conf = types.LiveConnectConfig(
-            response_modalities=self._opts.response_modalities
-            if is_given(self._opts.response_modalities)
-            else [types.Modality.AUDIO],
+            response_modalities=self._opts.response_modalities,
             generation_config=types.GenerationConfig(
                 candidate_count=self._opts.candidate_count,
                 temperature=temp,
@@ -759,7 +824,7 @@ class RealtimeSession(llm.RealtimeSession):
                 ),
                 language_code=self._opts.language if is_given(self._opts.language) else None,
             ),
-            tools=tools_config,  # type: ignore
+            tools=tools_config,
             input_audio_transcription=self._opts.input_audio_transcription,
             output_audio_transcription=self._opts.output_audio_transcription,
             session_resumption=types.SessionResumptionConfig(
@@ -793,12 +858,19 @@ class RealtimeSession(llm.RealtimeSession):
             audio_ch=utils.aio.Chan[rtc.AudioFrame](),
             _created_timestamp=time.time(),
         )
+        if not self._realtime_model.capabilities.audio_output:
+            self._current_generation.audio_ch.close()
 
+        msg_modalities = asyncio.Future[list[Literal["text", "audio"]]]()
+        msg_modalities.set_result(
+            ["audio", "text"] if self._realtime_model.capabilities.audio_output else ["text"]
+        )
         self._current_generation.message_ch.send_nowait(
             llm.MessageGeneration(
                 message_id=response_id,
                 text_stream=self._current_generation.text_ch,
                 audio_stream=self._current_generation.audio_ch,
+                modalities=msg_modalities,
             )
         )
 
@@ -806,12 +878,17 @@ class RealtimeSession(llm.RealtimeSession):
             message_stream=self._current_generation.message_ch,
             function_stream=self._current_generation.function_ch,
             user_initiated=False,
+            response_id=self._current_generation.response_id,
         )
 
         if self._pending_generation_fut and not self._pending_generation_fut.done():
             generation_event.user_initiated = True
             self._pending_generation_fut.set_result(generation_event)
             self._pending_generation_fut = None
+        else:
+            # emit input_speech_started event before starting an agent initiated generation
+            # to interrupt the previous audio playout if any
+            self._handle_input_speech_started()
 
         self.emit("generation_created", generation_event)
 
@@ -877,6 +954,9 @@ class RealtimeSession(llm.RealtimeSession):
         if not self._current_generation or self._current_generation._done:
             return
 
+        # emit input_speech_stopped event after the generation is done
+        self._handle_input_speech_stopped()
+
         gen = self._current_generation
 
         # The only way we'd know that the transcription is complete is by when they are
@@ -921,6 +1001,12 @@ class RealtimeSession(llm.RealtimeSession):
     def _handle_input_speech_started(self) -> None:
         self.emit("input_speech_started", llm.InputSpeechStartedEvent())
 
+    def _handle_input_speech_stopped(self) -> None:
+        self.emit(
+            "input_speech_stopped",
+            llm.InputSpeechStoppedEvent(user_transcription_enabled=False),
+        )
+
     def _handle_tool_calls(self, tool_call: types.LiveServerToolCall) -> None:
         if not self._current_generation:
             logger.warning("received tool call but no active generation.")
@@ -933,11 +1019,10 @@ class RealtimeSession(llm.RealtimeSession):
             gen.function_ch.send_nowait(
                 llm.FunctionCall(
                     call_id=fnc_call.id or utils.shortuuid("fnc-call-"),
-                    name=fnc_call.name,  # type: ignore
+                    name=fnc_call.name,
                     arguments=arguments,
                 )
             )
-        self._on_final_input_audio_transcription()
         self._mark_current_generation_done()
 
     def _handle_tool_call_cancellation(
@@ -983,7 +1068,7 @@ class RealtimeSession(llm.RealtimeSession):
             return token_details_map
 
         metrics = RealtimeModelMetrics(
-            label=self._realtime_model._label,
+            label=self._realtime_model.label,
             request_id=current_gen.response_id,
             timestamp=current_gen._created_timestamp,
             duration=duration,
@@ -1008,6 +1093,9 @@ class RealtimeSession(llm.RealtimeSession):
             output_token_details=RealtimeModelMetrics.OutputTokenDetails(
                 **_token_details_map(usage_metadata.response_tokens_details),
             ),
+            metadata=Metadata(
+                model_name=self._realtime_model.model, model_provider=self._realtime_model.provider
+            ),
         )
         self.emit("metrics_collected", metrics)
 
@@ -1017,15 +1105,6 @@ class RealtimeSession(llm.RealtimeSession):
         )
         # TODO(dz): this isn't a seamless reconnection just yet
         self._session_should_close.set()
-
-    def _on_final_input_audio_transcription(self) -> None:
-        if (gen := self._current_generation) and gen.input_transcription:
-            self.emit(
-                "input_audio_transcription_completed",
-                llm.InputTranscriptionCompleted(
-                    item_id=gen.response_id, transcript=gen.input_transcription, is_final=True
-                ),
-            )
 
     def commit_audio(self) -> None:
         pass
@@ -1065,3 +1144,16 @@ class RealtimeSession(llm.RealtimeSession):
                 recoverable=recoverable,
             ),
         )
+
+    def _is_new_generation(self, resp: types.LiveServerMessage) -> bool:
+        if resp.tool_call:
+            return True
+
+        if (sc := resp.server_content) and (
+            sc.model_turn
+            or (sc.output_transcription and sc.output_transcription.text is not None)
+            or (sc.input_transcription and sc.input_transcription.text is not None)
+        ):
+            return True
+
+        return False

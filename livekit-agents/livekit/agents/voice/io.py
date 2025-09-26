@@ -54,27 +54,71 @@ class TimedString(str):
 
 
 class AudioInput:
+    def __init__(self, *, label: str, source: AudioInput | None = None) -> None:
+        self.__label = label
+        self.__source = source
+
     def __aiter__(self) -> AsyncIterator[rtc.AudioFrame]:
         return self
 
+    @property
+    def label(self) -> str:
+        return self.__label
+
+    @property
+    def source(self) -> AudioInput | None:
+        return self.__source
+
     async def __anext__(self) -> rtc.AudioFrame:
+        if self.source:
+            return await self.source.__anext__()
+
         raise NotImplementedError
 
-    def on_attached(self) -> None: ...
+    def on_attached(self) -> None:
+        if self.source:
+            self.on_attached()
 
-    def on_detached(self) -> None: ...
+    def on_detached(self) -> None:
+        if self.source:
+            self.on_detached()
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(label={self.label!r}, source={self.source!r})"
 
 
 class VideoInput:
+    def __init__(self, *, label: str, source: VideoInput | None = None) -> None:
+        self.__source = source
+        self.__label = label
+
     def __aiter__(self) -> AsyncIterator[rtc.VideoFrame]:
         return self
 
+    @property
+    def label(self) -> str:
+        return self.__label
+
+    @property
+    def source(self) -> VideoInput | None:
+        return self.__source
+
     async def __anext__(self) -> rtc.VideoFrame:
+        if self.source:
+            return await self.source.__anext__()
+
         raise NotImplementedError
 
-    def on_attached(self) -> None: ...
+    def on_attached(self) -> None:
+        if self.source:
+            self.on_attached()
 
-    def on_detached(self) -> None: ...
+    def on_detached(self) -> None:
+        if self.source:
+            self.on_detached()
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(label={self.label!r}, source={self.source!r})"
 
 
 @dataclass
@@ -88,10 +132,17 @@ class PlaybackFinishedEvent:
     When None, the transcript is not synchronized with the playback"""
 
 
+@dataclass
+class AudioOutputCapabilities:
+    pause: bool
+
+
 class AudioOutput(ABC, rtc.EventEmitter[Literal["playback_finished"]]):
     def __init__(
         self,
         *,
+        label: str,
+        capabilities: AudioOutputCapabilities,
         next_in_chain: AudioOutput | None = None,
         sample_rate: int | None = None,
     ) -> None:
@@ -100,10 +151,12 @@ class AudioOutput(ABC, rtc.EventEmitter[Literal["playback_finished"]]):
             sample_rate: The sample rate required by the audio sink, if None, any sample rate is accepted
         """  # noqa: E501
         super().__init__()
-        self._next_in_chain = next_in_chain
+        self.__next_in_chain = next_in_chain
         self._sample_rate = sample_rate
+        self.__label = label
         self.__capturing = False
         self.__playback_finished_event = asyncio.Event()
+        self._capabilities = capabilities
 
         self.__playback_segments_count = 0
         self.__playback_finished_count = 0
@@ -111,8 +164,8 @@ class AudioOutput(ABC, rtc.EventEmitter[Literal["playback_finished"]]):
             playback_position=0, interrupted=False
         )
 
-        if self._next_in_chain:
-            self._next_in_chain.on(
+        if self.next_in_chain:
+            self.next_in_chain.on(
                 "playback_finished",
                 lambda ev: self.on_playback_finished(
                     interrupted=ev.interrupted,
@@ -120,6 +173,14 @@ class AudioOutput(ABC, rtc.EventEmitter[Literal["playback_finished"]]):
                     synchronized_transcript=ev.synchronized_transcript,
                 ),
             )
+
+    @property
+    def label(self) -> str:
+        return self.__label
+
+    @property
+    def next_in_chain(self) -> AudioOutput | None:
+        return self.__next_in_chain
 
     def on_playback_finished(
         self,
@@ -171,6 +232,10 @@ class AudioOutput(ABC, rtc.EventEmitter[Literal["playback_finished"]]):
         """The sample rate required by the audio sink, if None, any sample rate is accepted"""
         return self._sample_rate
 
+    @property
+    def can_pause(self) -> bool:
+        return self._capabilities.pause and (not self.next_in_chain or self.next_in_chain.can_pause)
+
     @abstractmethod
     async def capture_frame(self, frame: rtc.AudioFrame) -> None:
         """Capture an audio frame for playback, frames can be pushed faster than real-time"""
@@ -188,17 +253,39 @@ class AudioOutput(ABC, rtc.EventEmitter[Literal["playback_finished"]]):
         """Clear the buffer, stopping playback immediately"""
 
     def on_attached(self) -> None:
-        if self._next_in_chain:
-            self._next_in_chain.on_attached()
+        if self.next_in_chain:
+            self.next_in_chain.on_attached()
 
     def on_detached(self) -> None:
-        if self._next_in_chain:
-            self._next_in_chain.on_detached()
+        if self.next_in_chain:
+            self.next_in_chain.on_detached()
+
+    def pause(self) -> None:
+        """Pause the audio playback"""
+        if self.next_in_chain:
+            self.next_in_chain.pause()
+
+    def resume(self) -> None:
+        """Resume the audio playback"""
+        if self.next_in_chain:
+            self.next_in_chain.resume()
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(label={self.label!r}, next={self.next_in_chain!r})"
 
 
 class TextOutput(ABC):
-    def __init__(self, *, next_in_chain: TextOutput | None) -> None:
-        self._next_in_chain = next_in_chain
+    def __init__(self, *, label: str, next_in_chain: TextOutput | None) -> None:
+        self.__label = label
+        self.__next_in_chain = next_in_chain
+
+    @property
+    def label(self) -> str:
+        return self.__label
+
+    @property
+    def next_in_chain(self) -> TextOutput | None:
+        return self.__next_in_chain
 
     @abstractmethod
     async def capture_text(self, text: str) -> None:
@@ -209,18 +296,30 @@ class TextOutput(ABC):
         """Mark the current text segment as complete (e.g LLM generation is complete)"""
 
     def on_attached(self) -> None:
-        if self._next_in_chain:
-            self._next_in_chain.on_attached()
+        if self.next_in_chain:
+            self.next_in_chain.on_attached()
 
     def on_detached(self) -> None:
-        if self._next_in_chain:
-            self._next_in_chain.on_detached()
+        if self.next_in_chain:
+            self.next_in_chain.on_detached()
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(label={self.label!r}, next={self.next_in_chain!r})"
 
 
 # TODO(theomonnom): Add documentation to VideoSink
 class VideoOutput(ABC):
-    def __init__(self, *, next_in_chain: VideoOutput | None) -> None:
-        self._next_in_chain = next_in_chain
+    def __init__(self, *, label: str, next_in_chain: VideoOutput | None) -> None:
+        self.__label = label
+        self.__next_in_chain = next_in_chain
+
+    @property
+    def label(self) -> str:
+        return self.__label
+
+    @property
+    def next_in_chain(self) -> VideoOutput | None:
+        return self.__next_in_chain
 
     @abstractmethod
     async def capture_frame(self, text: rtc.VideoFrame) -> None: ...
@@ -229,12 +328,15 @@ class VideoOutput(ABC):
     def flush(self) -> None: ...
 
     def on_attached(self) -> None:
-        if self._next_in_chain:
-            self._next_in_chain.on_attached()
+        if self.next_in_chain:
+            self.next_in_chain.on_attached()
 
     def on_detached(self) -> None:
-        if self._next_in_chain:
-            self._next_in_chain.on_detached()
+        if self.next_in_chain:
+            self.next_in_chain.on_detached()
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(label={self.label!r}, next={self.next_in_chain!r})"
 
 
 class AgentInput:
@@ -251,6 +353,9 @@ class AgentInput:
         self._video_enabled = True
 
     def set_audio_enabled(self, enable: bool) -> None:
+        if enable and not self._audio_stream:
+            logger.warning("Cannot enable audio input when it's not set")
+
         if enable == self._audio_enabled:
             return
 
@@ -265,6 +370,9 @@ class AgentInput:
             self._audio_stream.on_detached()
 
     def set_video_enabled(self, enable: bool) -> None:
+        if enable and not self._video_stream:
+            logger.warning("Cannot enable video input when it's not set")
+
         if enable == self._video_enabled:
             return
 
@@ -292,8 +400,20 @@ class AgentInput:
 
     @video.setter
     def video(self, stream: VideoInput | None) -> None:
+        if stream is self._video_stream:
+            return
+
+        if self._video_stream:
+            self._video_stream.on_detached()
+
         self._video_stream = stream
         self._video_changed()
+
+        if self._video_stream:
+            if self._video_enabled:
+                self._video_stream.on_attached()
+            else:
+                self._video_stream.on_detached()
 
     @property
     def audio(self) -> AudioInput | None:
@@ -301,8 +421,20 @@ class AgentInput:
 
     @audio.setter
     def audio(self, stream: AudioInput | None) -> None:
+        if stream is self._audio_stream:
+            return
+
+        if self._audio_stream:
+            self._audio_stream.on_detached()
+
         self._audio_stream = stream
         self._audio_changed()
+
+        if self._audio_stream:
+            if self._audio_enabled:
+                self._audio_stream.on_attached()
+            else:
+                self._audio_stream.on_detached()
 
 
 class AgentOutput:
@@ -324,6 +456,9 @@ class AgentOutput:
         self._transcription_enabled = True
 
     def set_video_enabled(self, enabled: bool) -> None:
+        if enabled and not self._video_sink:
+            logger.warning("Cannot enable video output when it's not set")
+
         if enabled == self._video_enabled:
             return
 
@@ -338,6 +473,9 @@ class AgentOutput:
             self._video_sink.on_detached()
 
     def set_audio_enabled(self, enabled: bool) -> None:
+        if enabled and not self._audio_sink:
+            logger.warning("Cannot enable audio output when it's not set")
+
         if enabled == self._audio_enabled:
             return
 
@@ -352,6 +490,9 @@ class AgentOutput:
             self._audio_sink.on_detached()
 
     def set_transcription_enabled(self, enabled: bool) -> None:
+        if enabled and not self._transcription_sink:
+            logger.warning("Cannot enable transcription output when it's not set")
+
         if enabled == self._transcription_enabled:
             return
 
@@ -383,8 +524,20 @@ class AgentOutput:
 
     @video.setter
     def video(self, sink: VideoOutput | None) -> None:
+        if sink is self._video_sink:
+            return
+
+        if self._video_sink:
+            self._video_sink.on_detached()
+
         self._video_sink = sink
         self._video_changed()
+
+        if self._video_sink:
+            if self._video_enabled:
+                self._video_sink.on_attached()
+            else:
+                self._video_sink.on_detached()
 
     @property
     def audio(self) -> AudioOutput | None:
@@ -402,7 +555,10 @@ class AgentOutput:
         self._audio_changed()
 
         if self._audio_sink:
-            self._audio_sink.on_attached()
+            if self._audio_enabled:
+                self._audio_sink.on_attached()
+            else:
+                self._audio_sink.on_detached()
 
     @property
     def transcription(self) -> TextOutput | None:
@@ -420,4 +576,7 @@ class AgentOutput:
         self._transcription_changed()
 
         if self._transcription_sink:
-            self._transcription_sink.on_attached()
+            if self._transcription_enabled:
+                self._transcription_sink.on_attached()
+            else:
+                self._transcription_sink.on_detached()

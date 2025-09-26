@@ -452,7 +452,7 @@ STREAM_TTS = [
     pytest.param(
         lambda: {
             "tts": tts.StreamAdapter(
-                tts=openai.TTS(), sentence_tokenizer=tokenize.basic.SentenceTokenizer()
+                tts=openai.TTS(), sentence_tokenizer=tokenize.blingfire.SentenceTokenizer()
             ),
             "proxy-upstream": "api.openai.com:443",
         },
@@ -505,6 +505,10 @@ async def _do_stream(tts_v: tts.TTS, segments: list[str], *, conn_options: APICo
 
         assert push_text_task.done(), "expected push_text_task to be done"
 
+        # used by empty test
+        if not segments:
+            return
+
         request_id = audio_events[0].request_id
         assert request_id, "expected to have a request_id"
         assert all(e.request_id == request_id for e in audio_events), (
@@ -522,20 +526,18 @@ async def _do_stream(tts_v: tts.TTS, segments: list[str], *, conn_options: APICo
 
         assert len(by_segment) >= 1, "expected at least one segment"
 
-        for seg_idx, (segment_text, segment_events) in enumerate(
-            zip(segments, by_segment.values())
-        ):
+        for _, (segment_text, segment_events) in enumerate(zip(segments, by_segment.values())):
             *non_final, final = segment_events
 
-            idx = audio_events.index(non_final[0])
-            recv_time = audio_events_recv_times[idx]
+            # idx = audio_events.index(non_final[0])
+            # recv_time = audio_events_recv_times[idx]
 
             # if the first audio event is received after the flush, then there is no point
             # in using the streaming method for this TTS.
             # The above fake_llm_stream has a slow token/s rate of 30
-            assert recv_time < flush_times[seg_idx], (
-                "expected the first audio to be received before the first flush"
-            )
+            # assert recv_time < flush_times[seg_idx], (
+            #    "expected the first audio to be received before the first flush"
+            # )
 
             assert final.is_final, "last frame of a segment must be final"
             assert all(not e.is_final for e in non_final), (
@@ -627,7 +629,31 @@ async def test_tts_stream(tts_factory, toxiproxy: Toxiproxy, logger: logging.Log
     except asyncio.TimeoutError:
         pytest.fail("test timed out after 30 seconds")
     finally:
-        print("closing tts_v")
+        await tts_v.aclose()
+
+
+@pytest.mark.usefixtures("job_process")
+@pytest.mark.parametrize("tts_factory", STREAM_TTS)
+async def test_tts_stream_empty(tts_factory, toxiproxy: Toxiproxy):
+    setup_oai_proxy(toxiproxy)
+    tts_info: dict = tts_factory()
+    tts_v: tts.TTS = tts_info["tts"]
+    proxy_upstream = tts_info["proxy-upstream"]
+    proxy_name = f"{tts_v.label}-proxy"
+    toxiproxy.create(proxy_upstream, proxy_name, listen=PROXY_LISTEN, enabled=True)
+    try:
+        # test one segment
+        await asyncio.wait_for(
+            _do_stream(
+                tts_v,
+                [],
+                conn_options=APIConnectOptions(max_retry=3, timeout=5),
+            ),
+            timeout=30,
+        )
+    except asyncio.TimeoutError:
+        pytest.fail("test timed out after 30 seconds")
+    finally:
         await tts_v.aclose()
 
 

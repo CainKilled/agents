@@ -131,6 +131,14 @@ class TTS(tts.TTS):
             temperature=temperature,
         )
 
+    @property
+    def model(self) -> str:
+        return self._opts.model
+
+    @property
+    def provider(self) -> str:
+        return "Inworld"
+
     def update_options(
         self,
         *,
@@ -227,6 +235,8 @@ class ChunkedStream(tts.ChunkedStream):
                 },
                 json=body_params,
                 timeout=aiohttp.ClientTimeout(sock_connect=self._conn_options.timeout),
+                # large read_bufsize to avoid `ValueError: Chunk too big`
+                read_bufsize=10 * 1024 * 1024,
             ) as resp:
                 resp.raise_for_status()
 

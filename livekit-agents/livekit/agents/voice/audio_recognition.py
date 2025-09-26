@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import math
 import time
 from collections.abc import AsyncIterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
+from opentelemetry import trace
+
 from livekit import rtc
 
 from .. import llm, stt, utils, vad
-from ..debug import tracing
 from ..log import logger
-from ..utils import aio
+from ..telemetry import trace_types, tracer
+from ..types import NOT_GIVEN, NotGivenOr
+from ..utils import aio, is_given
 from . import io
 from .agent import ModelSettings
 
@@ -27,23 +32,42 @@ class _EndOfTurnInfo:
     transcription_delay: float
     end_of_utterance_delay: float
     transcript_confidence: float
+    last_speaking_time: float
+    _user_turn_span: trace.Span | None = None
+
+
+@dataclass
+class _PreemptiveGenerationInfo:
+    new_transcript: str
+    transcript_confidence: float
 
 
 class _TurnDetector(Protocol):
-    # TODO: Move those two functions to EOU ctor (capabilities dataclass)
-    def unlikely_threshold(self, language: str | None) -> float | None: ...
-    def supports_language(self, language: str | None) -> bool: ...
+    @property
+    def model(self) -> str:
+        return "unknown"
 
-    async def predict_end_of_turn(self, chat_ctx: llm.ChatContext) -> float: ...
+    @property
+    def provider(self) -> str:
+        return "unknown"
+
+    # TODO: Move those two functions to EOU ctor (capabilities dataclass)
+    async def unlikely_threshold(self, language: str | None) -> float | None: ...
+    async def supports_language(self, language: str | None) -> bool: ...
+
+    async def predict_end_of_turn(
+        self, chat_ctx: llm.ChatContext, *, timeout: float | None = None
+    ) -> float: ...
 
 
 class RecognitionHooks(Protocol):
     def on_start_of_speech(self, ev: vad.VADEvent) -> None: ...
     def on_vad_inference_done(self, ev: vad.VADEvent) -> None: ...
     def on_end_of_speech(self, ev: vad.VADEvent) -> None: ...
-    def on_interim_transcript(self, ev: stt.SpeechEvent) -> None: ...
+    def on_interim_transcript(self, ev: stt.SpeechEvent, *, speaking: bool | None) -> None: ...
     def on_final_transcript(self, ev: stt.SpeechEvent) -> None: ...
     def on_end_of_turn(self, info: _EndOfTurnInfo) -> bool: ...
+    def on_preemptive_generation(self, info: _PreemptiveGenerationInfo) -> None: ...
 
     def retrieve_chat_ctx(self) -> llm.ChatContext: ...
 
@@ -84,18 +108,24 @@ class AudioRecognition:
         self._audio_transcript = ""
         self._audio_interim_transcript = ""
         self._last_language: str | None = None
-        self._vad_graph = tracing.Tracing.add_graph(
-            title="vad",
-            x_label="time",
-            y_label="speech_probability",
-            x_type="time",
-            y_range=(0, 1),
-            max_data_points=int(30 * 30),
-        )
 
         self._stt_ch: aio.Chan[rtc.AudioFrame] | None = None
         self._vad_ch: aio.Chan[rtc.AudioFrame] | None = None
         self._tasks: set[asyncio.Task[Any]] = set()
+
+        self._user_turn_span: trace.Span | None = None
+        self._closing = asyncio.Event()
+
+    def update_options(
+        self,
+        *,
+        min_endpointing_delay: NotGivenOr[float] = NOT_GIVEN,
+        max_endpointing_delay: NotGivenOr[float] = NOT_GIVEN,
+    ) -> None:
+        if is_given(min_endpointing_delay):
+            self._min_endpointing_delay = min_endpointing_delay
+        if is_given(max_endpointing_delay):
+            self._max_endpointing_delay = max_endpointing_delay
 
     def start(self) -> None:
         self.update_stt(self._stt)
@@ -114,9 +144,12 @@ class AudioRecognition:
             self._vad_ch.send_nowait(frame)
 
     async def aclose(self) -> None:
-        await aio.cancel_and_wait(*self._tasks)
+        self._closing.set()
+
         if self._commit_user_turn_atask is not None:
-            await aio.cancel_and_wait(self._commit_user_turn_atask)
+            await self._commit_user_turn_atask
+
+        await aio.cancel_and_wait(*self._tasks)
 
         if self._stt_atask is not None:
             await aio.cancel_and_wait(self._stt_atask)
@@ -125,7 +158,7 @@ class AudioRecognition:
             await aio.cancel_and_wait(self._vad_atask)
 
         if self._end_of_turn_task is not None:
-            await aio.cancel_and_wait(self._end_of_turn_task)
+            await self._end_of_turn_task
 
     def update_stt(self, stt: io.STTNode | None) -> None:
         self._stt = stt
@@ -166,7 +199,16 @@ class AudioRecognition:
         self.update_stt(None)
         self.update_stt(stt)
 
-    def commit_user_turn(self, *, audio_detached: bool, transcript_timeout: float) -> None:
+    def commit_user_turn(
+        self,
+        *,
+        audio_detached: bool,
+        transcript_timeout: float,
+        stt_flush_duration: float = 2.0,
+    ) -> None:
+        if not self._stt or self._closing.is_set():
+            return
+
         async def _commit_user_turn() -> None:
             if time.time() - self._last_final_transcript_time > 0.5:
                 # if the last final transcript is received more than 0.5s ago
@@ -183,7 +225,8 @@ class AudioRecognition:
                         num_channels=1,
                         samples_per_channel=num_samples,
                     )
-                    for _ in range(5):  # 5 * 0.2s = 1s
+                    num_frames = max(0, int(math.ceil(stt_flush_duration / silence_frame.duration)))
+                    for _ in range(num_frames):
                         self.push_audio(silence_frame)
 
                 # wait for the final transcript to be available
@@ -193,13 +236,31 @@ class AudioRecognition:
                         timeout=transcript_timeout,
                     )
                 except asyncio.TimeoutError:
-                    pass
+                    if self._audio_interim_transcript:
+                        logger.warning(
+                            "final transcript not received after timeout",
+                            extra={
+                                "transcript_timeout": transcript_timeout,
+                                "interim_transcript": self._audio_interim_transcript,
+                            },
+                        )
 
             if self._audio_interim_transcript:
+                # emit interim transcript as final for frontend display
+                self._hooks.on_final_transcript(
+                    stt.SpeechEvent(
+                        type=stt.SpeechEventType.FINAL_TRANSCRIPT,
+                        alternatives=[
+                            stt.SpeechData(language="", text=self._audio_interim_transcript)
+                        ],
+                    )
+                )
+
                 # append interim transcript in case the final transcript is not ready
                 self._audio_transcript = (
                     f"{self._audio_transcript} {self._audio_interim_transcript}".strip()
                 )
+
             self._audio_interim_transcript = ""
             chat_ctx = self._hooks.retrieve_chat_ctx().copy()
             self._run_eou_detection(chat_ctx)
@@ -234,7 +295,6 @@ class AudioRecognition:
             return
 
         if ev.type == stt.SpeechEventType.FINAL_TRANSCRIPT:
-            self._hooks.on_final_transcript(ev)
             transcript = ev.alternatives[0].text
             language = ev.alternatives[0].language
             confidence = ev.alternatives[0].confidence
@@ -247,17 +307,10 @@ class AudioRecognition:
             if not transcript:
                 return
 
+            self._hooks.on_final_transcript(ev)
             logger.debug(
                 "received user transcript",
                 extra={"user_transcript": transcript, "language": self._last_language},
-            )
-
-            tracing.Tracing.log_event(
-                "user transcript",
-                {
-                    "transcript": transcript,
-                    "buffered_transcript": self._audio_transcript,
-                },
             )
 
             self._last_final_transcript_time = time.time()
@@ -267,21 +320,33 @@ class AudioRecognition:
             self._audio_interim_transcript = ""
             self._final_transcript_received.set()
 
-            if not self._speaking:
-                if not self._vad:
-                    # vad disabled, use stt timestamp
-                    # TODO: this would screw up transcription latency metrics
-                    # but we'll live with it for now.
-                    # the correct way is to ensure STT fires SpeechEventType.END_OF_SPEECH
-                    # and using that timestamp for _last_speaking_time
-                    self._last_speaking_time = time.time()
+            if not self._vad or self._last_speaking_time == 0:
+                # vad disabled, use stt timestamp
+                # TODO: this would screw up transcription latency metrics
+                # but we'll live with it for now.
+                # the correct way is to ensure STT fires SpeechEventType.END_OF_SPEECH
+                # and using that timestamp for _last_speaking_time
+                self._last_speaking_time = time.time()
 
-                if self._vad_base_turn_detection or self._user_turn_committed:
+            if self._vad_base_turn_detection or self._user_turn_committed:
+                self._hooks.on_preemptive_generation(
+                    _PreemptiveGenerationInfo(
+                        new_transcript=self._audio_transcript,
+                        transcript_confidence=(
+                            sum(self._final_transcript_confidence)
+                            / len(self._final_transcript_confidence)
+                            if self._final_transcript_confidence
+                            else 0
+                        ),
+                    )
+                )
+
+                if not self._speaking:
                     chat_ctx = self._hooks.retrieve_chat_ctx().copy()
                     self._run_eou_detection(chat_ctx)
 
         elif ev.type == stt.SpeechEventType.INTERIM_TRANSCRIPT:
-            self._hooks.on_interim_transcript(ev)
+            self._hooks.on_interim_transcript(ev, speaking=self._speaking if self._vad else None)
             self._audio_interim_transcript = ev.alternatives[0].text
 
         elif ev.type == stt.SpeechEventType.END_OF_SPEECH and self._turn_detection_mode == "stt":
@@ -293,18 +358,23 @@ class AudioRecognition:
 
     async def _on_vad_event(self, ev: vad.VADEvent) -> None:
         if ev.type == vad.VADEventType.START_OF_SPEECH:
-            self._hooks.on_start_of_speech(ev)
+            with trace.use_span(self._ensure_user_turn_span()):
+                self._hooks.on_start_of_speech(ev)
+
             self._speaking = True
+            self._last_speaking_time = time.time() - ev.speech_duration
 
             if self._end_of_turn_task is not None:
                 self._end_of_turn_task.cancel()
 
         elif ev.type == vad.VADEventType.INFERENCE_DONE:
-            self._vad_graph.plot(ev.timestamp, ev.probability)
             self._hooks.on_vad_inference_done(ev)
+            self._last_speaking_time = time.time() - ev.silence_duration
 
         elif ev.type == vad.VADEventType.END_OF_SPEECH:
-            self._hooks.on_end_of_speech(ev)
+            with trace.use_span(self._ensure_user_turn_span()):
+                self._hooks.on_end_of_speech(ev)
+
             self._speaking = False
             # when VAD fires END_OF_SPEECH, it already waited for the silence_duration
             self._last_speaking_time = time.time() - ev.silence_duration
@@ -331,27 +401,56 @@ class AudioRecognition:
         @utils.log_exceptions(logger=logger)
         async def _bounce_eou_task(last_speaking_time: float) -> None:
             endpointing_delay = self._min_endpointing_delay
-
+            user_turn_span = self._ensure_user_turn_span()
             if turn_detector is not None:
-                if not turn_detector.supports_language(self._last_language):
-                    logger.debug("Turn detector does not support language %s", self._last_language)
+                if not await turn_detector.supports_language(self._last_language):
+                    logger.info("Turn detector does not support language %s", self._last_language)
                 else:
-                    end_of_turn_probability = await turn_detector.predict_end_of_turn(chat_ctx)
-                    tracing.Tracing.log_event(
-                        "end of user turn probability",
-                        {"probability": end_of_turn_probability},
-                    )
-                    unlikely_threshold = turn_detector.unlikely_threshold(self._last_language)
-                    if (
-                        unlikely_threshold is not None
-                        and end_of_turn_probability < unlikely_threshold
+                    with (
+                        trace.use_span(user_turn_span),
+                        tracer.start_as_current_span("eou_detection") as eou_detection_span,
                     ):
-                        endpointing_delay = self._max_endpointing_delay
+                        # if there are failures, we should not hold the pipeline up
+                        end_of_turn_probability = 0.0
+                        unlikely_threshold: float | None = None
+                        try:
+                            end_of_turn_probability = await turn_detector.predict_end_of_turn(
+                                chat_ctx
+                            )
+                            unlikely_threshold = await turn_detector.unlikely_threshold(
+                                self._last_language
+                            )
+                            if (
+                                unlikely_threshold is not None
+                                and end_of_turn_probability < unlikely_threshold
+                            ):
+                                endpointing_delay = self._max_endpointing_delay
+                        except Exception:
+                            logger.exception("Error predicting end of turn")
+
+                        eou_detection_span.set_attributes(
+                            {
+                                trace_types.ATTR_CHAT_CTX: json.dumps(
+                                    chat_ctx.to_dict(
+                                        exclude_audio=True,
+                                        exclude_image=True,
+                                        exclude_timestamp=False,
+                                    )
+                                ),
+                                trace_types.ATTR_EOU_PROBABILITY: end_of_turn_probability,
+                                trace_types.ATTR_EOU_UNLIKELY_THRESHOLD: unlikely_threshold or 0,
+                                trace_types.ATTR_EOU_DELAY: endpointing_delay,
+                                trace_types.ATTR_EOU_LANGUAGE: self._last_language or "",
+                            }
+                        )
 
             extra_sleep = last_speaking_time + endpointing_delay - time.time()
-            await asyncio.sleep(max(extra_sleep, 0))
+            if extra_sleep > 0:
+                try:
+                    await asyncio.wait_for(self._closing.wait(), timeout=extra_sleep)
+                except asyncio.TimeoutError:
+                    pass
 
-            tracing.Tracing.log_event("end of user turn", {"transcript": self._audio_transcript})
             confidence_avg = (
                 sum(self._final_transcript_confidence) / len(self._final_transcript_confidence)
                 if self._final_transcript_confidence
@@ -371,9 +470,21 @@ class AudioRecognition:
                     transcription_delay=transcription_delay,
                     end_of_utterance_delay=end_of_utterance_delay,
                     transcript_confidence=confidence_avg,
+                    last_speaking_time=last_speaking_time,
                 )
             )
             if committed:
+                user_turn_span.set_attributes(
+                    {
+                        trace_types.ATTR_USER_TRANSCRIPT: self._audio_transcript,
+                        trace_types.ATTR_TRANSCRIPT_CONFIDENCE: confidence_avg,
+                        trace_types.ATTR_TRANSCRIPTION_DELAY: transcription_delay,
+                        trace_types.ATTR_END_OF_UTTERANCE_DELAY: end_of_utterance_delay,
+                    }
+                )
+                user_turn_span.end()
+                self._user_turn_span = None
+
                 # clear the transcript if the user turn was committed
                 self._audio_transcript = ""
                 self._final_transcript_confidence = []
@@ -436,3 +547,10 @@ class AudioRecognition:
         finally:
             await aio.cancel_and_wait(forward_task)
             await stream.aclose()
+
+    def _ensure_user_turn_span(self) -> trace.Span:
+        if self._user_turn_span and self._user_turn_span.is_recording():
+            return self._user_turn_span
+
+        self._user_turn_span = tracer.start_span("user_turn")
+        return self._user_turn_span

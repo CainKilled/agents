@@ -4,6 +4,7 @@ import asyncio
 import sys
 import threading
 import time
+from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
 import click
@@ -11,10 +12,13 @@ import numpy as np
 
 from livekit import rtc
 
+from ..cli import cli
+from ..job import get_job_context
 from ..log import logger
 from ..utils import aio, log_exceptions
 from . import io
 from .agent_session import AgentSession
+from .recorder_io import RecorderIO
 from .transcription import TranscriptSynchronizer
 
 if TYPE_CHECKING:
@@ -40,6 +44,7 @@ def _normalize_db(amplitude_db: float, db_min: float, db_max: float) -> float:
 
 class _AudioInput(io.AudioInput):
     def __init__(self, cli: ChatCLI) -> None:
+        super().__init__(label="ChatCLI")
         self._cli = cli
 
     async def __anext__(self) -> rtc.AudioFrame:
@@ -48,7 +53,7 @@ class _AudioInput(io.AudioInput):
 
 class _TextOutput(io.TextOutput):
     def __init__(self, cli: ChatCLI) -> None:
-        super().__init__(next_in_chain=None)
+        super().__init__(label="ChatCLI", next_in_chain=None)
         self._cli = cli
         self._capturing = False
         self._enabled = True
@@ -78,18 +83,25 @@ class _TextOutput(io.TextOutput):
 
 class _AudioOutput(io.AudioOutput):
     def __init__(self, cli: ChatCLI) -> None:
-        super().__init__(next_in_chain=None, sample_rate=24000)
+        super().__init__(
+            label="ChatCLI",
+            next_in_chain=None,
+            sample_rate=24000,
+            capabilities=io.AudioOutputCapabilities(pause=True),
+        )
         self._cli = cli
-        self._capturing = False
         self._pushed_duration: float = 0.0
         self._capture_start: float = 0.0
-        self._dispatch_handle: asyncio.TimerHandle | None = None
-
-        self._flush_complete = asyncio.Event()
-        self._flush_complete.set()
+        self._dispatch_task: asyncio.Task[None] | None = None
 
         self._output_buf = bytearray()
         self._output_lock = threading.Lock()
+        self._output_buf_empty = asyncio.Event()
+        self._output_buf_empty.set()
+        self._interrupted_ev = asyncio.Event()
+
+        self._paused_at: float | None = None
+        self._paused_duration: float = 0.0
 
     @property
     def lock(self) -> threading.Lock:
@@ -99,51 +111,93 @@ class _AudioOutput(io.AudioOutput):
     def audio_buffer(self) -> bytearray:
         return self._output_buf
 
+    @property
+    def paused(self) -> bool:
+        return self._paused_at is not None
+
+    def mark_output_empty(self) -> None:
+        self._output_buf_empty.set()
+
     async def capture_frame(self, frame: rtc.AudioFrame) -> None:
         await super().capture_frame(frame)
-        await self._flush_complete.wait()
 
-        if not self._capturing:
-            self._capturing = True
-            self._pushed_duration = 0.0
+        if self._dispatch_task and not self._dispatch_task.done():
+            logger.error("capture_frame called while previous flush is in progress")
+            await self._dispatch_task
+
+        if not self._pushed_duration:
             self._capture_start = time.monotonic()
 
         self._pushed_duration += frame.duration
         with self._output_lock:
             self._output_buf += frame.data
+            self._output_buf_empty.clear()
 
     def flush(self) -> None:
         super().flush()
-        if self._capturing:
-            self._flush_complete.clear()
-            self._capturing = False
-            to_wait = max(0.0, self._pushed_duration - (time.monotonic() - self._capture_start))
-            self._dispatch_handle = self._cli._loop.call_later(
-                to_wait, self._dispatch_playback_finished
-            )
+        if self._pushed_duration:
+            if self._dispatch_task and not self._dispatch_task.done():
+                logger.error("flush called while previous flush is in progress")
+                self._dispatch_task.cancel()
+
+            self._dispatch_task = asyncio.create_task(self._dispatch_playback_finished())
 
     def clear_buffer(self) -> None:
-        self._capturing = False
-
         with self._output_lock:
             self._output_buf.clear()
+            self._output_buf_empty.set()
 
-        if self._pushed_duration > 0.0:
-            if self._dispatch_handle is not None:
-                self._dispatch_handle.cancel()
+        if self._pushed_duration:
+            self._interrupted_ev.set()
 
-            self._flush_complete.set()
-            played_duration = min(time.monotonic() - self._capture_start, self._pushed_duration)
-            self.on_playback_finished(
-                playback_position=played_duration,
-                interrupted=played_duration + 1.0 < self._pushed_duration,
+    def pause(self) -> None:
+        super().pause()
+
+        if self._paused_at is None:
+            self._paused_at = time.monotonic()
+
+    def resume(self) -> None:
+        super().resume()
+
+        if self._paused_at is not None:
+            self._paused_duration += time.monotonic() - self._paused_at
+            self._paused_at = None
+
+    async def _dispatch_playback_finished(self) -> None:
+        async def _wait_buffered_audio() -> None:
+            while len(self._output_buf) > 0:
+                await self._output_buf_empty.wait()
+
+        wait_for_interruption = asyncio.create_task(self._interrupted_ev.wait())
+        wait_for_playout = asyncio.create_task(_wait_buffered_audio())
+
+        try:
+            await asyncio.wait(
+                [wait_for_playout, wait_for_interruption], return_when=asyncio.FIRST_COMPLETED
             )
-            self._pushed_duration = 0.0
+            interrupted = wait_for_interruption.done()
+        finally:
+            wait_for_playout.cancel()
+            wait_for_interruption.cancel()
 
-    def _dispatch_playback_finished(self) -> None:
-        self.on_playback_finished(playback_position=self._pushed_duration, interrupted=False)
-        self._flush_complete.set()
+        if self._paused_at is not None:
+            self._paused_duration += time.monotonic() - self._paused_at
+            self._paused_at = None
+
+        if interrupted:
+            played_duration = time.monotonic() - self._capture_start - self._paused_duration
+            played_duration = min(max(0, played_duration), self._pushed_duration)
+        else:
+            played_duration = self._pushed_duration
+
+        self.on_playback_finished(playback_position=played_duration, interrupted=interrupted)
+
         self._pushed_duration = 0.0
+        self._paused_at = None
+        self._paused_duration = 0.0
+        self._interrupted_ev.clear()
+        with self._output_lock:
+            self._output_buf_empty.set()
 
 
 class ChatCLI:
@@ -188,7 +242,34 @@ class ChatCLI:
 
         self._main_atask: asyncio.Task[None] | None = None
 
+        self._input_audio: io.AudioInput = _AudioInput(self)
+        self._output_audio: io.AudioOutput = (
+            self._transcript_syncer.audio_output if self._transcript_syncer else self._audio_sink
+        )
+
+        self._recorder_io: RecorderIO | None = None
+        if cli.CLI_ARGUMENTS is not None and cli.CLI_ARGUMENTS.record:
+            self._recorder_io = RecorderIO(agent_session=agent_session)
+            self._input_audio = self._recorder_io.record_input(self._input_audio)
+            self._output_audio = self._recorder_io.record_output(self._output_audio)
+
     async def start(self) -> None:
+        if self._recorder_io:
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+            filename = f"console_{timestamp}.ogg"
+            await self._recorder_io.start(output_path=filename)
+
+            try:
+                job_ctx = get_job_context()
+                job_ctx.add_shutdown_callback(self._recorder_io.aclose)
+            except RuntimeError:
+                pass  # ignore
+
+        if self._transcript_syncer:
+            self._update_text_output(enable=True, stdout_enable=False)
+
+        self._update_microphone(enable=True)
+        self._update_speaker(enable=True)
         self._main_atask = asyncio.create_task(self._main_task(), name="_main_task")
 
     @log_exceptions(logger=logger)
@@ -229,11 +310,6 @@ class ChatCLI:
 
             self._loop.add_reader(fd, on_input)
 
-        self._update_microphone(enable=True)
-        self._update_speaker(enable=True)
-        if self._transcript_syncer:
-            self._update_text_output(enable=True, stdout_enable=False)
-
         try:
             input_cli_task = asyncio.create_task(self._input_cli_task(stdin_ch))
             input_cli_task.add_done_callback(lambda _: self._done_fut.set_result(None))
@@ -269,7 +345,7 @@ class ChatCLI:
                 blocksize=2400,
             )
             self._input_stream.start()
-            self._session.input.audio = _AudioInput(self)
+            self._session.input.audio = self._input_audio
         elif self._input_stream is not None:
             self._input_stream.stop()
             self._input_stream.close()
@@ -290,11 +366,7 @@ class ChatCLI:
                 blocksize=2400,  # 100ms
             )
             self._output_stream.start()
-            self._session.output.audio = (
-                self._transcript_syncer.audio_output
-                if self._transcript_syncer
-                else self._audio_sink
-            )
+            self._session.output.audio = self._output_audio
         elif self._output_stream is not None:
             self._output_stream.close()
             self._output_stream = None
@@ -315,20 +387,24 @@ class ChatCLI:
 
         FRAME_SAMPLES = 240
         with self._audio_sink.lock:
-            bytes_needed = frames * 2
-            if len(self._audio_sink.audio_buffer) < bytes_needed:
-                available_bytes = len(self._audio_sink.audio_buffer)
-                outdata[: available_bytes // 2, 0] = np.frombuffer(
-                    self._audio_sink.audio_buffer,
-                    dtype=np.int16,
-                    count=available_bytes // 2,
-                )
-                outdata[available_bytes // 2 :, 0] = 0
-                del self._audio_sink.audio_buffer[:available_bytes]
+            if self._audio_sink.paused:
+                outdata[:, 0] = 0
             else:
-                chunk = self._audio_sink.audio_buffer[:bytes_needed]
-                outdata[:, 0] = np.frombuffer(chunk, dtype=np.int16, count=frames)
-                del self._audio_sink.audio_buffer[:bytes_needed]
+                bytes_needed = frames * 2
+                if len(self._audio_sink.audio_buffer) < bytes_needed:
+                    available_bytes = len(self._audio_sink.audio_buffer)
+                    outdata[: available_bytes // 2, 0] = np.frombuffer(
+                        self._audio_sink.audio_buffer,
+                        dtype=np.int16,
+                        count=available_bytes // 2,
+                    )
+                    outdata[available_bytes // 2 :, 0] = 0
+                    del self._audio_sink.audio_buffer[:available_bytes]
+                    self._audio_sink.mark_output_empty()
+                else:
+                    chunk = self._audio_sink.audio_buffer[:bytes_needed]
+                    outdata[:, 0] = np.frombuffer(chunk, dtype=np.int16, count=frames)
+                    del self._audio_sink.audio_buffer[:bytes_needed]
 
         num_chunks = frames // FRAME_SAMPLES
         for i in range(num_chunks):
@@ -346,7 +422,11 @@ class ChatCLI:
     def _sd_input_callback(self, indata: np.ndarray, frame_count: int, time, *_) -> None:  # type: ignore
         self._input_delay = time.currentTime - time.inputBufferAdcTime
         total_delay = self._output_delay + self._input_delay
-        self._apm.set_stream_delay_ms(int(total_delay * 1000))
+
+        try:
+            self._apm.set_stream_delay_ms(int(total_delay * 1000))
+        except RuntimeError:
+            pass  # setting stream delay in console mode fails often, so we silently continue
 
         FRAME_SAMPLES = 240  # 10ms at 24000 Hz
         num_frames = frame_count // FRAME_SAMPLES
