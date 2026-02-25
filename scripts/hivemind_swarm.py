@@ -23,9 +23,9 @@ async def process_line(line: str) -> list[str]:
 async def main() -> None:
     proc = subprocess.run(
         [
-            "grep",
-            "-n",
-            "-R",
+            "rg",
+            "--line-number",
+            "--no-heading",
             "missing",
             ".",
         ],
